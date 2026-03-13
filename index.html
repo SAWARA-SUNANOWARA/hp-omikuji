@@ -27,7 +27,14 @@
     .subtitle {
       font-size: 0.85rem;
       color: #999;
-      margin-bottom: 3em;
+      margin-bottom: 1.5em;
+    }
+
+    .counter {
+      font-size: 0.75rem;
+      color: #bbb;
+      margin-bottom: 2em;
+      letter-spacing: 0.1em;
     }
 
     .shapes {
@@ -70,6 +77,7 @@
 
   <h1>TODAY'S FORTUNE</h1>
   <p class="subtitle">ひとつ選んでください</p>
+  <p class="counter" id="counter"></p>
 
   <div class="shapes">
     <!-- Shape 1: ぷっくりした花のような形（ピンク） -->
@@ -132,14 +140,18 @@
   <script>
     let members = [];
 
-    // ページ読み込み時にスプレッドシートからデータ取得
+    // ページ読み込み時にデータ取得 & カウント表示
     fetchMembers().then(all => {
-      members = all.filter(m => m.active); // 現役メンバーだけ
+      members = all.filter(m => m.active);
+    });
+    getCount().then(count => {
+      document.getElementById("counter").textContent = count.toLocaleString() + " 回引かれました";
     });
 
     function draw() {
       if (members.length === 0) return;
       const chosen = members[Math.floor(Math.random() * members.length)];
+      incrementCount();
       document.body.style.transition = "opacity 0.4s";
       document.body.style.opacity = "0";
       setTimeout(() => {
