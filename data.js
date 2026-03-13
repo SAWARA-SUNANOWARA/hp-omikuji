@@ -60,16 +60,16 @@ async function fetchMembers() {
 }
 
 // カウンターAPI
-const COUNTER_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AY5xjrQ1LOqZXbi65hmnu2wnjlmojeh3abq8iPc400sRLtY_zBWl1oZHpYbZfkX2dEWIv4G137DxiOnhHId3eUKiXichnuFfh_baAmWbvlwpo9QYN8p3nJlcUDBNaFn_bdFSQ31a2ag1M0hgWTId-o6MdI5nEoVOMfPIjIqDSS6S9NFutwYoE0f3YDXW3mZAC2iaVgolB_q8lsTTC7s_o5bEa9oQX1UEwd1GqY6K0f6E84WxfLEVeFpvbu0P_qwsckQ2ZLdtYkltUj1FNmmIHOJA4m5V7WRdc4IBHxzRfelV&lib=M89Kb0ai98F9pWhZ4n63X4NPUFfqQX3Fo";
+const COUNTER_URL = "https://script.google.com/macros/s/AKfycbzmiXpubnemp18uMI-NHcrmr6tCUqflW6586a6ItDI9DikbcdWRDZZAGHgkF0LICHnQUQ/exec";
 
 async function getCount() {
-  const res = await fetch(COUNTER_URL + "&action=get");
+  const res = await fetch(COUNTER_URL + "?action=get", { redirect: "follow" });
   const data = await res.json();
   return data.count;
 }
 
 async function incrementCount() {
-  const res = await fetch(COUNTER_URL + "&action=increment");
+  const res = await fetch(COUNTER_URL + "?action=increment", { redirect: "follow" });
   const data = await res.json();
   return data.count;
 }
