@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ハロプロおみくじ - 結果</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #f5f0e8;
+      font-family: "Helvetica Neue", "Yu Gothic", "YuGothic", sans-serif;
+      opacity: 0;
+      animation: fadeIn 0.8s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 3em 2.5em;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    }
+
+    .label {
+      font-size: 0.7rem;
+      letter-spacing: 0.4em;
+      color: #aaa;
+      text-transform: uppercase;
+      margin-bottom: 1em;
+    }
+
+    .member-name {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 0.3em;
+      letter-spacing: 0.1em;
+    }
+
+    .fortune-label {
+      font-size: 0.75rem;
+      color: #bbb;
+      letter-spacing: 0.2em;
+      margin: 1.5em 0 0.8em;
+    }
+
+    .fortune-message {
+      font-size: 1rem;
+      line-height: 1.9;
+      color: #444;
+      min-height: 4em;
+    }
+
+    .divider {
+      width: 40px;
+      height: 2px;
+      background: #ddd;
+      margin: 1.5em auto;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-top: 2em;
+      font-size: 0.8rem;
+      color: #999;
+      text-decoration: none;
+      letter-spacing: 0.15em;
+      transition: color 0.2s;
+    }
+
+    .back-link:hover {
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <p class="label">Today's Fortune</p>
+    <h1 class="member-name" id="memberName">---</h1>
+    <div class="divider"></div>
+    <p class="fortune-label">今日の運勢</p>
+    <p class="fortune-message" id="fortuneMessage">---</p>
+  </div>
+
+  <a href="index.html" class="back-link">もう一度引く</a>
+
+  <script src="data.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const id = params.get("id");
+
+    if (!id) {
+      location.href = "index.html";
+    } else {
+      fetchMembers().then(all => {
+        const member = all.find(m => m.id === id);
+        if (member) {
+          document.getElementById("memberName").textContent = member.name;
+          document.getElementById("fortuneMessage").textContent =
+            member.message || "運勢メッセージは準備中です。";
+          document.title = "ハロプロおみくじ - " + member.name;
+        } else {
+          location.href = "index.html";
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>
