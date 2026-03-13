@@ -31,9 +31,9 @@
     }
 
     .shapes {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(2, auto);
       gap: 2.5em;
-      flex-wrap: wrap;
       justify-content: center;
     }
 
@@ -61,8 +61,8 @@
     }
 
     @media (max-width: 600px) {
-      .shapes { gap: 1.5em; }
-      .shape-btn svg { width: 90px; height: 90px; }
+      .shapes { gap: 1.5em 2em; }
+      .shape-btn svg { width: 110px; height: 110px; }
     }
   </style>
 </head>
