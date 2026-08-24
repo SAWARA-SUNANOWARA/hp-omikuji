@@ -17,7 +17,7 @@
       color: #333;
     }
 
-    /* ---- 初回セットアップ画面 ---- */
+    /* ---- 初回セットアップ画面(呼び名のみ) ---- */
     #setup {
       flex: 1;
       width: 100%;
@@ -220,11 +220,10 @@
 </head>
 <body>
 
-  <!-- 初回セットアップ: 合言葉と呼び名を入力 -->
+  <!-- 初回セットアップ: 呼び名だけ入力(合言葉はURLから自動で受け取る) -->
   <div id="setup">
     <h1>HOTLINE</h1>
-    <p class="hint">2人だけの合言葉と、ここで使う呼び名を入力してください。<br>一度入力すればこの端末には保存されます。</p>
-    <input type="password" id="keyInput" placeholder="合言葉">
+    <p class="hint">ここで使う呼び名を入力してください。<br>一度入力すればこの端末には保存されます。</p>
     <input type="text" id="nameInput" placeholder="呼び名(ニックネーム)" maxlength="20">
     <button id="enterBtn">はじめる</button>
   </div>
@@ -253,22 +252,18 @@
       hotlineKey = getHotlineKey();
       myName = getHotlineName();
 
-      if (hotlineKey && myName) {
+      if (myName) {
         showChat();
       } else {
-        document.getElementById("keyInput").value = hotlineKey;
         document.getElementById("nameInput").value = myName;
         document.getElementById("setup").style.display = "flex";
       }
     }
 
     document.getElementById("enterBtn").addEventListener("click", () => {
-      const key = document.getElementById("keyInput").value.trim();
       const name = document.getElementById("nameInput").value.trim();
-      if (!key || !name) return;
-      saveHotlineKey(key);
+      if (!name) return;
       saveHotlineName(name);
-      hotlineKey = key;
       myName = name;
       showChat();
     });
@@ -298,7 +293,7 @@
     function renderError(kind) {
       const box = document.getElementById("messages");
       const msg = kind === "unauthorized"
-        ? "合言葉が正しくありません。"
+        ? "合言葉が正しくありません。共有されたリンクから開き直してください。"
         : "通信に失敗しました。";
       box.innerHTML = `<p id="empty">${msg}</p>`;
     }
