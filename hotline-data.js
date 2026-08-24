@@ -1,7 +1,7 @@
 // 2人専用ホットライン用のフロントエンドAPIラッパー
 //
 // デプロイ後、Apps ScriptのウェブアプリURLをここに設定してください。
-const HOTLINE_API_URL = "YOUR_APPS_SCRIPT_EXEC_URL_HERE";
+const HOTLINE_API_URL = "https://script.google.com/macros/s/AKfycbz3pxOEU92RnpQ7mwFeRujDd23A1Fu4DGZ01FSSAfwB1-4yLsNf7R-UGzyvfDmFP4gQeQ/exec";
 
 const HOTLINE_KEY_STORAGE = "hotlineKey";
 const HOTLINE_NAME_STORAGE = "hotlineMyName";
