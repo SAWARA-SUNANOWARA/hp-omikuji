@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hotline</title>
-  <link rel="icon" href="favicon-32.png" sizes="32x32">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <title>Aroma Room</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -15,9 +13,9 @@
     }
 
     body {
-      background: #f5f0e8;
+      background: #f2f4f7;
       font-family: "Helvetica Neue", "Yu Gothic", "YuGothic", sans-serif;
-      color: #333;
+      color: #2a3448;
     }
 
     /* ---- チャット画面 ----
@@ -37,10 +35,9 @@
     }
 
     header {
-      padding: 1em;
+      padding: 1.1em 1em 0.9em;
       text-align: center;
-      border-bottom: 1px solid #e5ddd0;
-      background: #f5f0e8;
+      background: #1c2b45;
       position: sticky;
       top: 0;
       display: flex;
@@ -49,26 +46,33 @@
     }
 
     header h1 {
-      font-size: 0.9rem;
-      letter-spacing: 0.2em;
-      color: #666;
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      font-family: Georgia, "Hiragino Mincho ProN", "Yu Mincho", serif;
+      font-size: 0.85rem;
+      letter-spacing: 0.25em;
+      color: #f2ead9;
     }
+
+    header h1 svg { color: #b6935c; flex-shrink: 0; }
+    header h1 .sprig-right { transform: scaleX(-1); }
 
     header button {
       background: none;
       border: none;
-      color: #aaa;
-      font-size: 0.75rem;
+      color: #9aa8c4;
+      font-size: 0.7rem;
       cursor: pointer;
       letter-spacing: 0.05em;
     }
 
-    header button:hover { color: #666; }
+    header button:hover { color: #f2ead9; }
 
     #messages {
       flex: 1;
       overflow-y: auto;
-      padding: 1em;
+      padding: 1.2em 1em;
       display: flex;
       flex-direction: column;
       gap: 0.6em;
@@ -92,14 +96,14 @@
 
     .author {
       font-size: 0.65rem;
-      color: #aaa;
+      color: #8891a3;
       margin-bottom: 0.2em;
       letter-spacing: 0.05em;
     }
 
     .bubble {
       padding: 0.6em 0.9em;
-      border-radius: 14px;
+      border-radius: 4px;
       font-size: 0.9rem;
       line-height: 1.5;
       white-space: pre-wrap;
@@ -107,37 +111,38 @@
     }
 
     .mine .bubble {
-      background: #c4a8e0;
-      color: #fff;
-      border-bottom-right-radius: 4px;
+      background: #1c2b45;
+      color: #f2ead9;
+      border-bottom-right-radius: 0;
     }
 
     .theirs .bubble {
       background: #fff;
-      color: #333;
-      border-bottom-left-radius: 4px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      color: #2a3448;
+      border: 1px solid #e1e5ec;
+      border-bottom-left-radius: 0;
     }
 
     .timestamp {
       font-size: 0.6rem;
-      color: #bbb;
+      color: #a3abb9;
       margin-top: 0.2em;
     }
 
     #empty {
       margin: auto;
-      color: #bbb;
+      color: #9aa3b3;
       font-size: 0.8rem;
       text-align: center;
+      letter-spacing: 0.05em;
     }
 
     form#composer {
       display: flex;
       gap: 0.5em;
       padding: 0.8em;
-      border-top: 1px solid #e5ddd0;
-      background: #f5f0e8;
+      border-top: 1px solid #e1e5ec;
+      background: #fff;
     }
 
     form#composer textarea {
@@ -147,20 +152,21 @@
       font-size: 16px;
       font-family: inherit;
       padding: 0.7em 0.9em;
-      border: 1px solid #ddd;
-      border-radius: 10px;
+      border: 1px solid #d7dce4;
+      border-radius: 4px;
       outline: none;
       max-height: 6em;
+      background: #f8f9fb;
     }
 
     form#composer textarea:focus {
-      border-color: #c4a8e0;
+      border-color: #1c2b45;
     }
 
     form#composer button {
       border: none;
-      border-radius: 10px;
-      background: #7ecec1;
+      border-radius: 4px;
+      background: #b6935c;
       color: #fff;
       padding: 0 1.2em;
       font-size: 0.85rem;
@@ -181,7 +187,21 @@
   <div id="chat">
     <header>
       <button id="logoutBtn">ログアウト</button>
-      <h1>HOTLINE</h1>
+      <h1>
+        <svg class="sprig" viewBox="0 0 40 16" width="26" height="11" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" aria-hidden="true">
+          <path d="M2 8 H16"/>
+          <path d="M16 8 C13 4 8 4 6 7"/>
+          <path d="M16 8 C13 12 8 12 6 9"/>
+          <circle cx="18" cy="8" r="1.3" fill="currentColor" stroke="none"/>
+        </svg>
+        AROMA ROOM
+        <svg class="sprig sprig-right" viewBox="0 0 40 16" width="26" height="11" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" aria-hidden="true">
+          <path d="M2 8 H16"/>
+          <path d="M16 8 C13 4 8 4 6 7"/>
+          <path d="M16 8 C13 12 8 12 6 9"/>
+          <circle cx="18" cy="8" r="1.3" fill="currentColor" stroke="none"/>
+        </svg>
+      </h1>
       <button id="refreshBtn">更新</button>
     </header>
     <div id="messages"><p id="empty">まだメッセージはありません</p></div>
