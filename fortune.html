@@ -166,15 +166,18 @@
 
   <script>
     // 画面をなぞる動き(スワイプ/ドラッグ)を監視し、
-    // 1.5秒以内に「右 → 左下 → 右」(Zの字)または「上 → 右下 → 上」(Nの字)
+    // 1.5秒以内に「右 → 左下 → 右」(Zの字)または「右 → 下 → 左」(コの字)
     // という軌跡を描くと、なぞった文字に対応する人物としてhotline-chat.htmlへ移動する。
+    // どちらも最初の動きが横方向なので、iOS Safariが縦方向のドラッグを
+    // ブラウザ側のUI操作(ツールバーの表示/非表示など)として奪ってしまう
+    // 問題を避けられる。
     // ボタンの通常タップとは干渉しない(移動量がほぼ無いため判定に掛からない)。
     (function () {
       const MAX_DURATION_MS = 1500;
       const MIN_SEGMENT_PX = 40;
 
       // なぞった文字と、それに対応する人物のIDの対応表
-      const GESTURE_IDENTITIES = { Z: "sawara", N: "hiiragi" };
+      const GESTURE_IDENTITIES = { Z: "sawara", KO: "hiiragi" };
 
       let points = [];
       let tracking = false;
@@ -223,19 +226,19 @@
         const d3x = seg3[seg3.length - 1].x - seg3[0].x;
         const d3y = seg3[seg3.length - 1].y - seg3[0].y;
 
-        // Z: 右 → 左下(斜め) → 右
+        // Z: 右(横) → 左下(斜め) → 右(横)
         const looksLikeZ =
           d1x > MIN_SEGMENT_PX && Math.abs(d1y) < Math.abs(d1x) * 0.6 &&
-          d2x < -MIN_SEGMENT_PX && d2y > MIN_SEGMENT_PX &&
+          d2x < -MIN_SEGMENT_PX && d2y > MIN_SEGMENT_PX && Math.abs(d2x) > d2y * 0.3 &&
           d3x > MIN_SEGMENT_PX && Math.abs(d3y) < Math.abs(d3x) * 0.6;
         if (looksLikeZ) return "Z";
 
-        // N: 上 → 右下(斜め) → 上
-        const looksLikeN =
-          d1y < -MIN_SEGMENT_PX && Math.abs(d1x) < Math.abs(d1y) * 0.6 &&
-          d2x > MIN_SEGMENT_PX && d2y > MIN_SEGMENT_PX &&
-          d3y < -MIN_SEGMENT_PX && Math.abs(d3x) < Math.abs(d3y) * 0.6;
-        if (looksLikeN) return "N";
+        // コ: 右(横) → 下(縦) → 左(横)
+        const looksLikeKo =
+          d1x > MIN_SEGMENT_PX && Math.abs(d1y) < Math.abs(d1x) * 0.6 &&
+          d2y > MIN_SEGMENT_PX && Math.abs(d2x) < d2y * 0.3 &&
+          d3x < -MIN_SEGMENT_PX && Math.abs(d3y) < Math.abs(d3x) * 0.6;
+        if (looksLikeKo) return "KO";
 
         return null;
       }
