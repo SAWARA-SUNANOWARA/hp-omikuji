@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ハロプロおみくじ</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #f5f0e8;
+      font-family: "Helvetica Neue", "Yu Gothic", "YuGothic", sans-serif;
+      touch-action: pan-y;
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      color: #333;
+      letter-spacing: 0.3em;
+      margin-bottom: 0.5em;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #999;
+      margin-bottom: 1.5em;
+    }
+
+    .counter {
+      font-size: 0.75rem;
+      color: #bbb;
+      margin-bottom: 2em;
+      letter-spacing: 0.1em;
+    }
+
+    .shapes {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 2.5em;
+      justify-content: center;
+    }
+
+    .shape-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      opacity: 0.85;
+    }
+
+    .shape-btn:hover {
+      transform: scale(1.12);
+      opacity: 1;
+    }
+
+    .shape-btn:active {
+      transform: scale(0.95);
+    }
+
+    .shape-btn svg {
+      width: 130px;
+      height: 130px;
+      filter: drop-shadow(2px 4px 8px rgba(0,0,0,0.1));
+    }
+
+    @media (max-width: 600px) {
+      .shapes { gap: 1.5em 2em; }
+      .shape-btn svg { width: 110px; height: 110px; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>TODAY'S FORTUNE</h1>
+  <p class="subtitle">ひとつ選んでください</p>
+  <p class="counter" id="counter"></p>
+
+  <div class="shapes">
+    <!-- Shape 1: ぷっくりした花のような形（ピンク） -->
+    <button class="shape-btn" onclick="draw()">
+      <svg viewBox="0 0 130 130">
+        <circle cx="65" cy="30" r="22" fill="#f9a8c9"/>
+        <circle cx="35" cy="55" r="22" fill="#f9a8c9"/>
+        <circle cx="95" cy="55" r="22" fill="#f9a8c9"/>
+        <circle cx="45" cy="85" r="22" fill="#f9a8c9"/>
+        <circle cx="85" cy="85" r="22" fill="#f9a8c9"/>
+        <circle cx="65" cy="60" r="18" fill="#fff" opacity="0.5"/>
+      </svg>
+    </button>
+
+    <!-- Shape 2: まるっこい星（ミント） -->
+    <button class="shape-btn" onclick="draw()">
+      <svg viewBox="0 0 130 130">
+        <path d="M65 8
+                 C70 35, 90 40, 118 45
+                 C95 55, 88 78, 100 105
+                 C78 92, 68 88, 65 110
+                 C62 88, 52 92, 30 105
+                 C42 78, 35 55, 12 45
+                 C40 40, 60 35, 65 8Z"
+              fill="#7ecec1" stroke="#5bb8a9" stroke-width="1.5"/>
+        <circle cx="65" cy="58" r="14" fill="#fff" opacity="0.4"/>
+      </svg>
+    </button>
+
+    <!-- Shape 3: もこもこ雲のような形（ラベンダー） -->
+    <button class="shape-btn" onclick="draw()">
+      <svg viewBox="0 0 130 130">
+        <ellipse cx="65" cy="75" rx="48" ry="28" fill="#c4a8e0"/>
+        <circle cx="40" cy="58" r="25" fill="#c4a8e0"/>
+        <circle cx="75" cy="50" r="28" fill="#c4a8e0"/>
+        <circle cx="55" cy="42" r="20" fill="#c4a8e0"/>
+        <circle cx="90" cy="62" r="20" fill="#c4a8e0"/>
+        <ellipse cx="62" cy="58" rx="16" ry="12" fill="#fff" opacity="0.35"/>
+      </svg>
+    </button>
+
+    <!-- Shape 4: ぽてっとしたハート風（イエロー） -->
+    <button class="shape-btn" onclick="draw()">
+      <svg viewBox="0 0 130 130">
+        <path d="M65 115
+                 C50 100, 8 75, 12 48
+                 C15 28, 35 20, 50 22
+                 C58 23, 63 30, 65 35
+                 C67 30, 72 23, 80 22
+                 C95 20, 115 28, 118 48
+                 C122 75, 80 100, 65 115Z"
+              fill="#ffd166" stroke="#f0c040" stroke-width="1.5"/>
+        <ellipse cx="50" cy="52" rx="12" ry="10" fill="#fff" opacity="0.35"/>
+        <ellipse cx="82" cy="52" rx="12" ry="10" fill="#fff" opacity="0.35"/>
+      </svg>
+    </button>
+  </div>
+
+  <script src="data.js"></script>
+  <script>
+    let members = [];
+
+    // ページ読み込み時にデータ取得 & カウント表示
+    fetchMembers().then(all => {
+      members = all.filter(m => m.active);
+    });
+    getCount().then(count => {
+      document.getElementById("counter").textContent = count.toLocaleString() + " 回引かれました";
+    });
+
+    function draw() {
+      if (members.length === 0) return;
+      const chosen = members[Math.floor(Math.random() * members.length)];
+      incrementCount();
+      document.body.style.transition = "opacity 0.4s";
+      document.body.style.opacity = "0";
+      setTimeout(() => {
+        location.href = "member.html?id=" + chosen.id;
+      }, 400);
+    }
+  </script>
+
+  <script>
+    // 画面をなぞる動き(スワイプ/ドラッグ)を監視し、
+    // 1.5秒以内に「右 → 左下 → 右」という軌跡(Zの字)を描くと
+    // 通常のおみくじとは別の画面に移動する。
+    // ボタンの通常タップとは干渉しない(移動量がほぼ無いため判定に掛からない)。
+    (function () {
+      const MAX_DURATION_MS = 1500;
+      const MIN_SIZE_PX = 80;
+      const MIN_SEGMENT_PX = 30;
+
+      let points = [];
+      let tracking = false;
+
+      function onDown(e) {
+        tracking = true;
+        points = [{ x: e.clientX, y: e.clientY, t: Date.now() }];
+      }
+
+      function onMove(e) {
+        if (!tracking) return;
+        points.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+      }
+
+      function onUp(e) {
+        if (!tracking) return;
+        tracking = false;
+        points.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+        evaluateGesture();
+        points = [];
+      }
+
+      function onCancel() {
+        tracking = false;
+        points = [];
+      }
+
+      function evaluateGesture() {
+        if (points.length < 6) return;
+
+        const duration = points[points.length - 1].t - points[0].t;
+        if (duration > MAX_DURATION_MS) return;
+
+        const xs = points.map((p) => p.x);
+        const ys = points.map((p) => p.y);
+        const width = Math.max(...xs) - Math.min(...xs);
+        const height = Math.max(...ys) - Math.min(...ys);
+        if (width < MIN_SIZE_PX || height < MIN_SIZE_PX) return;
+
+        const segLen = Math.floor(points.length / 3);
+        if (segLen < 2) return;
+
+        const seg1 = points.slice(0, segLen);
+        const seg2 = points.slice(segLen, segLen * 2);
+        const seg3 = points.slice(segLen * 2);
+
+        const d1x = seg1[seg1.length - 1].x - seg1[0].x;
+        const d1y = seg1[seg1.length - 1].y - seg1[0].y;
+        const d2x = seg2[seg2.length - 1].x - seg2[0].x;
+        const d2y = seg2[seg2.length - 1].y - seg2[0].y;
+        const d3x = seg3[seg3.length - 1].x - seg3[0].x;
+        const d3y = seg3[seg3.length - 1].y - seg3[0].y;
+
+        const looksLikeZ =
+          d1x > MIN_SEGMENT_PX && Math.abs(d1y) < Math.abs(d1x) * 0.6 &&
+          d2x < -MIN_SEGMENT_PX && d2y > MIN_SEGMENT_PX &&
+          d3x > MIN_SEGMENT_PX && Math.abs(d3y) < Math.abs(d3x) * 0.6;
+
+        if (looksLikeZ) {
+          const params = new URLSearchParams(location.search);
+          const qs = params.toString();
+          location.href = "hotline-chat.html" + (qs ? "?" + qs : "");
+        }
+      }
+
+      document.addEventListener("pointerdown", onDown);
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onCancel);
+    })();
+  </script>
+
+</body>
+</html>

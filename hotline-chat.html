@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hotline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #f5f0e8;
+      font-family: "Helvetica Neue", "Yu Gothic", "YuGothic", sans-serif;
+      color: #333;
+    }
+
+    /* ---- 初回セットアップ画面(呼び名のみ) ---- */
+    #setup {
+      flex: 1;
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 2em;
+      gap: 1em;
+    }
+
+    #setup h1 {
+      font-size: 1.1rem;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.3em;
+      text-align: center;
+    }
+
+    #setup p.hint {
+      font-size: 0.8rem;
+      color: #999;
+      text-align: center;
+      margin-bottom: 1em;
+      line-height: 1.6;
+    }
+
+    #setup input {
+      font-size: 0.95rem;
+      padding: 0.8em 1em;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #fff;
+      outline: none;
+    }
+
+    #setup input:focus {
+      border-color: #c4a8e0;
+    }
+
+    #setup button {
+      font-size: 0.9rem;
+      padding: 0.8em 1em;
+      border: none;
+      border-radius: 8px;
+      background: #c4a8e0;
+      color: #fff;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    #setup button:hover { opacity: 0.85; }
+
+    /* ---- チャット画面 ---- */
+    #chat {
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      max-width: 480px;
+      height: 100vh;
+    }
+
+    header {
+      padding: 1em;
+      text-align: center;
+      border-bottom: 1px solid #e5ddd0;
+      background: #f5f0e8;
+      position: sticky;
+      top: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 0.9rem;
+      letter-spacing: 0.2em;
+      color: #666;
+    }
+
+    header button {
+      background: none;
+      border: none;
+      color: #aaa;
+      font-size: 0.75rem;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+    }
+
+    header button:hover { color: #666; }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1em;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6em;
+    }
+
+    .bubble-row {
+      display: flex;
+      flex-direction: column;
+      max-width: 78%;
+    }
+
+    .bubble-row.mine {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .bubble-row.theirs {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+
+    .author {
+      font-size: 0.65rem;
+      color: #aaa;
+      margin-bottom: 0.2em;
+      letter-spacing: 0.05em;
+    }
+
+    .bubble {
+      padding: 0.6em 0.9em;
+      border-radius: 14px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .mine .bubble {
+      background: #c4a8e0;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .theirs .bubble {
+      background: #fff;
+      color: #333;
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    .timestamp {
+      font-size: 0.6rem;
+      color: #bbb;
+      margin-top: 0.2em;
+    }
+
+    #empty {
+      margin: auto;
+      color: #bbb;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+
+    form#composer {
+      display: flex;
+      gap: 0.5em;
+      padding: 0.8em;
+      border-top: 1px solid #e5ddd0;
+      background: #f5f0e8;
+    }
+
+    form#composer textarea {
+      flex: 1;
+      resize: none;
+      font-size: 0.9rem;
+      font-family: inherit;
+      padding: 0.7em 0.9em;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      outline: none;
+      max-height: 6em;
+    }
+
+    form#composer textarea:focus {
+      border-color: #c4a8e0;
+    }
+
+    form#composer button {
+      border: none;
+      border-radius: 10px;
+      background: #7ecec1;
+      color: #fff;
+      padding: 0 1.2em;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    form#composer button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 初回セットアップ: 呼び名だけ入力(合言葉はURLから自動で受け取る) -->
+  <div id="setup">
+    <h1>HOTLINE</h1>
+    <p class="hint">ここで使う呼び名を入力してください。<br>一度入力すればこの端末には保存されます。</p>
+    <input type="text" id="nameInput" placeholder="呼び名(ニックネーム)" maxlength="20">
+    <button id="enterBtn">はじめる</button>
+  </div>
+
+  <!-- チャット画面 -->
+  <div id="chat">
+    <header>
+      <span style="width:3em"></span>
+      <h1>HOTLINE</h1>
+      <button id="refreshBtn">更新</button>
+    </header>
+    <div id="messages"><p id="empty">まだメッセージはありません</p></div>
+    <form id="composer">
+      <textarea id="messageInput" placeholder="メッセージを入力" rows="1" maxlength="1000"></textarea>
+      <button type="submit" id="sendBtn">送信</button>
+    </form>
+  </div>
+
+  <script src="hotline-data.js"></script>
+  <script>
+    let hotlineKey = "";
+    let myName = "";
+    let pollTimer = null;
+
+    function init() {
+      hotlineKey = getHotlineKey();
+      myName = getHotlineName();
+
+      if (myName) {
+        showChat();
+      } else {
+        document.getElementById("nameInput").value = myName;
+        document.getElementById("setup").style.display = "flex";
+      }
+    }
+
+    document.getElementById("enterBtn").addEventListener("click", () => {
+      const name = document.getElementById("nameInput").value.trim();
+      if (!name) return;
+      saveHotlineName(name);
+      myName = name;
+      showChat();
+    });
+
+    function showChat() {
+      document.getElementById("setup").style.display = "none";
+      document.getElementById("chat").style.display = "flex";
+      loadMessages();
+      // タブを開いている間だけ定期的に取りに行く(プッシュ通知は一切使わない)
+      pollTimer = setInterval(loadMessages, 15000);
+      window.addEventListener("beforeunload", () => clearInterval(pollTimer));
+    }
+
+    async function loadMessages() {
+      try {
+        const data = await fetchHotlineMessages(hotlineKey);
+        if (data.error) {
+          renderError(data.error);
+          return;
+        }
+        renderMessages(data.messages || []);
+      } catch (err) {
+        renderError("network");
+      }
+    }
+
+    function renderError(kind) {
+      const box = document.getElementById("messages");
+      const msg = kind === "unauthorized"
+        ? "合言葉が正しくありません。共有されたリンクから開き直してください。"
+        : "通信に失敗しました。";
+      box.innerHTML = `<p id="empty">${msg}</p>`;
+    }
+
+    function renderMessages(messages) {
+      const box = document.getElementById("messages");
+      if (messages.length === 0) {
+        box.innerHTML = '<p id="empty">まだメッセージはありません</p>';
+        return;
+      }
+      const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+
+      box.innerHTML = "";
+      for (const m of messages) {
+        const row = document.createElement("div");
+        row.className = "bubble-row " + (m.author === myName ? "mine" : "theirs");
+
+        if (m.author !== myName) {
+          const author = document.createElement("div");
+          author.className = "author";
+          author.textContent = m.author;
+          row.appendChild(author);
+        }
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = m.message;
+        row.appendChild(bubble);
+
+        const time = document.createElement("div");
+        time.className = "timestamp";
+        time.textContent = formatTime(m.timestamp);
+        row.appendChild(time);
+
+        box.appendChild(row);
+      }
+
+      if (wasNearBottom) {
+        box.scrollTop = box.scrollHeight;
+      }
+    }
+
+    function formatTime(iso) {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      return d.toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    }
+
+    document.getElementById("refreshBtn").addEventListener("click", loadMessages);
+
+    document.getElementById("composer").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("messageInput");
+      const text = input.value.trim();
+      if (!text) return;
+      const sendBtn = document.getElementById("sendBtn");
+      sendBtn.disabled = true;
+      try {
+        const result = await postHotlineMessage(hotlineKey, myName, text);
+        if (result.error) {
+          renderError(result.error);
+        } else {
+          input.value = "";
+          await loadMessages();
+          document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+        }
+      } catch (err) {
+        renderError("network");
+      } finally {
+        sendBtn.disabled = false;
+      }
+    });
+
+    // Enterで送信、Shift+Enterで改行
+    document.getElementById("messageInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById("composer").requestSubmit();
+      }
+    });
+
+    init();
+  </script>
+
+</body>
+</html>
