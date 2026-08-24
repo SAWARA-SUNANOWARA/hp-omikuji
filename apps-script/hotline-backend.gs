@@ -9,7 +9,7 @@
 //    - アクセスできるユーザー: 全員
 // 5. 発行されたURLを hotline-data.js の HOTLINE_API_URL に設定する
 
-const SECRET = "REPLACE_WITH_YOUR_OWN_SECRET"; // 必ず自分たちだけの合言葉に変更する
+const SECRET = "REPLACE_WITH_YOUR_OWN_SECRET"; // 必ず自分たちだけの合言葉に変更する(このリポジトリは公開なので、ここには実際の値を書かないこと)
 const SHEET_NAME = "Messages";
 const MAX_MESSAGES = 200; // 返却する最大件数
 
