@@ -210,9 +210,11 @@
       if (hotlineKey && myName) {
         showChat();
       } else {
-        // 有効なセッションが無い(=タブを閉じて蓋がされた状態)。
-        // 何も表示せず、ダミーのおみくじ画面に戻す。
-        location.replace("fortune.html");
+        // 有効なセッションが無い(=タブを閉じて蓋がされた状態、または
+        // ジェスチャーの判定ミス)。何も表示せず、ダミーのおみくじ画面に
+        // 戻す。合言葉(?key=...)は付いていればそのまま引き継ぎ、
+        // 再度なぞればやり直せるようにする。
+        location.replace("fortune.html" + location.search);
       }
     }
 
