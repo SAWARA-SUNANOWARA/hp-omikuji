@@ -143,7 +143,8 @@
     form#composer textarea {
       flex: 1;
       resize: none;
-      font-size: 0.9rem;
+      /* 16px未満だとiOS Safariがフォーカス時に自動ズームしてしまうため */
+      font-size: 16px;
       font-family: inherit;
       padding: 0.7em 0.9em;
       border: 1px solid #ddd;
