@@ -13,21 +13,27 @@
     }
 
     body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
       background: #f5f0e8;
       font-family: "Helvetica Neue", "Yu Gothic", "YuGothic", sans-serif;
       color: #333;
     }
 
-    /* ---- チャット画面 ---- */
+    /* ---- チャット画面 ----
+       iOS Safariは入力欄にフォーカスすると、キーボードの上に
+       持っていこうとページ自体を勝手にスクロールさせる。それを
+       CSSのoverflow:hiddenだけでは止められないため、#chatを
+       position: fixed にしてJS側で位置とサイズを直接制御する。 */
     #chat {
       display: none;
       flex-direction: column;
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
       width: 100%;
       max-width: 480px;
-      height: 100vh; /* JSでvisualViewportの高さに上書きする(キーボード表示対策) */
+      margin: 0 auto;
+      height: 100vh; /* JSでvisualViewportのサイズ・位置に上書きする */
     }
 
     header {
@@ -231,22 +237,31 @@
       setupViewportFix();
     }
 
-    // スマホでソフトキーボードが出るとレイアウトの高さ(100vh)がずれて
-    // メッセージ履歴の上側が見切れることがあるため、実際に見えている
-    // 領域(visualViewport)の高さに#chatの高さを合わせ続ける。
+    // スマホでソフトキーボードが出ると、iOS Safariは入力欄をキーボードの
+    // 上に持っていこうとページ自体を勝手にスクロールさせてしまう
+    // (overflow: hiddenだけでは止められない)。#chatの位置とサイズを
+    // 実際に見えている領域(visualViewport)に直接合わせ、ページの
+    // スクロール位置も強制的に(0, 0)に戻し続けることで、画面が
+    // 飛んだように見える現象を防ぐ。
     function setupViewportFix() {
       const chat = document.getElementById("chat");
       const vv = window.visualViewport;
       if (!vv) return;
 
-      function applyHeight() {
+      function applyViewport() {
+        chat.style.top = vv.offsetTop + "px";
         chat.style.height = vv.height + "px";
+        window.scrollTo(0, 0);
         const box = document.getElementById("messages");
         box.scrollTop = box.scrollHeight;
       }
 
-      applyHeight();
-      vv.addEventListener("resize", applyHeight);
+      applyViewport();
+      vv.addEventListener("resize", applyViewport);
+      vv.addEventListener("scroll", applyViewport);
+      window.addEventListener("scroll", () => {
+        if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
+      });
     }
 
     document.getElementById("logoutBtn").addEventListener("click", () => {
