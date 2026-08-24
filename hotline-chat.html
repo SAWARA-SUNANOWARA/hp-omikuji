@@ -250,10 +250,13 @@
     }
 
     document.getElementById("logoutBtn").addEventListener("click", () => {
+      // 消すのは「チャットに入れる権限」だけ。合言葉自体を消してしまうと
+      // 二度と入れなくなるので、fortune.htmlに戻る際は引き継ぐ。
+      const key = hotlineKey;
       sessionStorage.removeItem(HOTLINE_SESSION_KEY);
       sessionStorage.removeItem(HOTLINE_SESSION_IDENTITY);
       clearInterval(pollTimer);
-      location.href = "fortune.html";
+      location.href = "fortune.html" + (key ? "?key=" + encodeURIComponent(key) : "");
     });
 
     async function loadMessages() {
