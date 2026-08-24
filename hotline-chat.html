@@ -7,8 +7,12 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    html, body {
+      height: 100%;
+      overflow: hidden; /* ページ全体はスクロールさせず、#messagesだけスクロールする */
+    }
+
     body {
-      min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -23,7 +27,7 @@
       flex-direction: column;
       width: 100%;
       max-width: 480px;
-      height: 100vh;
+      height: 100vh; /* JSでvisualViewportの高さに上書きする(キーボード表示対策) */
     }
 
     header {
@@ -169,7 +173,7 @@
   <!-- チャット画面 -->
   <div id="chat">
     <header>
-      <span style="width:3em"></span>
+      <button id="logoutBtn">ログアウト</button>
       <h1>HOTLINE</h1>
       <button id="refreshBtn">更新</button>
     </header>
@@ -224,7 +228,33 @@
       // タブを開いている間だけ定期的に取りに行く(プッシュ通知は一切使わない)
       pollTimer = setInterval(loadMessages, 15000);
       window.addEventListener("beforeunload", () => clearInterval(pollTimer));
+      setupViewportFix();
     }
+
+    // スマホでソフトキーボードが出るとレイアウトの高さ(100vh)がずれて
+    // メッセージ履歴の上側が見切れることがあるため、実際に見えている
+    // 領域(visualViewport)の高さに#chatの高さを合わせ続ける。
+    function setupViewportFix() {
+      const chat = document.getElementById("chat");
+      const vv = window.visualViewport;
+      if (!vv) return;
+
+      function applyHeight() {
+        chat.style.height = vv.height + "px";
+        const box = document.getElementById("messages");
+        box.scrollTop = box.scrollHeight;
+      }
+
+      applyHeight();
+      vv.addEventListener("resize", applyHeight);
+    }
+
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      sessionStorage.removeItem(HOTLINE_SESSION_KEY);
+      sessionStorage.removeItem(HOTLINE_SESSION_IDENTITY);
+      clearInterval(pollTimer);
+      location.href = "fortune.html";
+    });
 
     async function loadMessages() {
       try {
