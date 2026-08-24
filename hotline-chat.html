@@ -28,12 +28,10 @@
       flex-direction: column;
       position: fixed;
       left: 0;
-      right: 0;
       top: 0;
       width: 100%;
       max-width: 480px;
-      margin: 0 auto;
-      height: 100vh; /* JSでvisualViewportのサイズ・位置に上書きする */
+      height: 100vh; /* JSでvisualViewportの位置・サイズに上書きする */
     }
 
     header {
@@ -250,6 +248,12 @@
       if (!vv) return;
 
       function applyViewport() {
+        // 横方向も含めて実際に見えている領域(visualViewport)に
+        // 位置とサイズを合わせる。iOSはキーボード表示中に横方向へも
+        // わずかにズレることがあり、topだけの補正だと右端が切れていた。
+        const width = Math.min(vv.width, 480);
+        chat.style.width = width + "px";
+        chat.style.left = (vv.offsetLeft + (vv.width - width) / 2) + "px";
         chat.style.top = vv.offsetTop + "px";
         chat.style.height = vv.height + "px";
         window.scrollTo(0, 0);
