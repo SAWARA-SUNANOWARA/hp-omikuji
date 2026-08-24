@@ -3,25 +3,25 @@
 // デプロイ後、Apps ScriptのウェブアプリURLをここに設定してください。
 const HOTLINE_API_URL = "https://script.google.com/macros/s/AKfycbz3pxOEU92RnpQ7mwFeRujDd23A1Fu4DGZ01FSSAfwB1-4yLsNf7R-UGzyvfDmFP4gQeQ/exec";
 
-const HOTLINE_KEY_STORAGE = "hotlineKey";
-const HOTLINE_NAME_STORAGE = "hotlineMyName";
+// sessionStorageに保存する(=タブを閉じると自動的に消える)。
+// 毎回fortune.html側でのジェスチャー認証をやり直させるための仕組み。
+const HOTLINE_SESSION_KEY = "hotlineSessionKey";
+const HOTLINE_SESSION_IDENTITY = "hotlineSessionIdentity";
 
-// 合言葉: URLの ?key=... を優先し、なければ保存済みのものを使う
 function getHotlineKey() {
-  const params = new URLSearchParams(location.search);
-  return params.get("key") || localStorage.getItem(HOTLINE_KEY_STORAGE) || "";
+  return sessionStorage.getItem(HOTLINE_SESSION_KEY) || "";
 }
 
 function saveHotlineKey(key) {
-  localStorage.setItem(HOTLINE_KEY_STORAGE, key);
+  sessionStorage.setItem(HOTLINE_SESSION_KEY, key);
 }
 
-function getHotlineName() {
-  return localStorage.getItem(HOTLINE_NAME_STORAGE) || "";
+function getHotlineIdentity() {
+  return sessionStorage.getItem(HOTLINE_SESSION_IDENTITY) || "";
 }
 
-function saveHotlineName(name) {
-  localStorage.setItem(HOTLINE_NAME_STORAGE, name);
+function saveHotlineIdentity(identity) {
+  sessionStorage.setItem(HOTLINE_SESSION_IDENTITY, identity);
 }
 
 async function fetchHotlineMessages(key) {

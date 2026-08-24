@@ -17,60 +17,6 @@
       color: #333;
     }
 
-    /* ---- 初回セットアップ画面(呼び名のみ) ---- */
-    #setup {
-      flex: 1;
-      width: 100%;
-      max-width: 380px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 2em;
-      gap: 1em;
-    }
-
-    #setup h1 {
-      font-size: 1.1rem;
-      letter-spacing: 0.15em;
-      margin-bottom: 0.3em;
-      text-align: center;
-    }
-
-    #setup p.hint {
-      font-size: 0.8rem;
-      color: #999;
-      text-align: center;
-      margin-bottom: 1em;
-      line-height: 1.6;
-    }
-
-    #setup input {
-      font-size: 0.95rem;
-      padding: 0.8em 1em;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: #fff;
-      outline: none;
-    }
-
-    #setup input:focus {
-      border-color: #c4a8e0;
-    }
-
-    #setup button {
-      font-size: 0.9rem;
-      padding: 0.8em 1em;
-      border: none;
-      border-radius: 8px;
-      background: #c4a8e0;
-      color: #fff;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-
-    #setup button:hover { opacity: 0.85; }
-
     /* ---- チャット画面 ---- */
     #chat {
       display: none;
@@ -220,14 +166,6 @@
 </head>
 <body>
 
-  <!-- 初回セットアップ: 呼び名だけ入力(合言葉はURLから自動で受け取る) -->
-  <div id="setup">
-    <h1>HOTLINE</h1>
-    <p class="hint">ここで使う呼び名を入力してください。<br>一度入力すればこの端末には保存されます。</p>
-    <input type="text" id="nameInput" placeholder="呼び名(ニックネーム)" maxlength="20">
-    <button id="enterBtn">はじめる</button>
-  </div>
-
   <!-- チャット画面 -->
   <div id="chat">
     <header>
@@ -244,32 +182,41 @@
 
   <script src="hotline-data.js"></script>
   <script>
+    // なぞった文字(fortune.html側の判定)と表示名の対応。
+    // ここを直接開いても合言葉や名前の入力欄は出さず、
+    // 有効なセッションが無ければ黙ってfortune.htmlに戻す。
+    const IDENTITY_NAMES = { sawara: "サワラ", hiiragi: "ヒイラギ" };
+
     let hotlineKey = "";
     let myName = "";
     let pollTimer = null;
 
     function init() {
-      hotlineKey = getHotlineKey();
-      myName = getHotlineName();
+      const params = new URLSearchParams(location.search);
+      const urlKey = params.get("key");
+      const urlAs = params.get("as");
 
-      if (myName) {
+      if (urlKey && IDENTITY_NAMES[urlAs]) {
+        saveHotlineKey(urlKey);
+        saveHotlineIdentity(urlAs);
+        // アドレスバーに合言葉を残さない
+        history.replaceState(null, "", location.pathname);
+      }
+
+      hotlineKey = getHotlineKey();
+      const identity = getHotlineIdentity();
+      myName = IDENTITY_NAMES[identity] || "";
+
+      if (hotlineKey && myName) {
         showChat();
       } else {
-        document.getElementById("nameInput").value = myName;
-        document.getElementById("setup").style.display = "flex";
+        // 有効なセッションが無い(=タブを閉じて蓋がされた状態)。
+        // 何も表示せず、ダミーのおみくじ画面に戻す。
+        location.replace("fortune.html");
       }
     }
 
-    document.getElementById("enterBtn").addEventListener("click", () => {
-      const name = document.getElementById("nameInput").value.trim();
-      if (!name) return;
-      saveHotlineName(name);
-      myName = name;
-      showChat();
-    });
-
     function showChat() {
-      document.getElementById("setup").style.display = "none";
       document.getElementById("chat").style.display = "flex";
       loadMessages();
       // タブを開いている間だけ定期的に取りに行く(プッシュ通知は一切使わない)

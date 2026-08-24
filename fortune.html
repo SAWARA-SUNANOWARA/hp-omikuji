@@ -163,13 +163,15 @@
 
   <script>
     // 画面をなぞる動き(スワイプ/ドラッグ)を監視し、
-    // 1.5秒以内に「右 → 左下 → 右」という軌跡(Zの字)を描くと
-    // 通常のおみくじとは別の画面に移動する。
+    // 1.5秒以内に「右 → 左下 → 右」(Zの字)または「上 → 右下 → 上」(Nの字)
+    // という軌跡を描くと、なぞった文字に対応する人物としてhotline-chat.htmlへ移動する。
     // ボタンの通常タップとは干渉しない(移動量がほぼ無いため判定に掛からない)。
     (function () {
       const MAX_DURATION_MS = 1500;
-      const MIN_SIZE_PX = 80;
-      const MIN_SEGMENT_PX = 30;
+      const MIN_SEGMENT_PX = 40;
+
+      // なぞった文字と、それに対応する人物のIDの対応表
+      const GESTURE_IDENTITIES = { Z: "sawara", N: "hiiragi" };
 
       let points = [];
       let tracking = false;
@@ -197,20 +199,14 @@
         points = [];
       }
 
-      function evaluateGesture() {
-        if (points.length < 6) return;
+      function classifyGesture() {
+        if (points.length < 6) return null;
 
         const duration = points[points.length - 1].t - points[0].t;
-        if (duration > MAX_DURATION_MS) return;
-
-        const xs = points.map((p) => p.x);
-        const ys = points.map((p) => p.y);
-        const width = Math.max(...xs) - Math.min(...xs);
-        const height = Math.max(...ys) - Math.min(...ys);
-        if (width < MIN_SIZE_PX || height < MIN_SIZE_PX) return;
+        if (duration > MAX_DURATION_MS) return null;
 
         const segLen = Math.floor(points.length / 3);
-        if (segLen < 2) return;
+        if (segLen < 2) return null;
 
         const seg1 = points.slice(0, segLen);
         const seg2 = points.slice(segLen, segLen * 2);
@@ -223,16 +219,31 @@
         const d3x = seg3[seg3.length - 1].x - seg3[0].x;
         const d3y = seg3[seg3.length - 1].y - seg3[0].y;
 
+        // Z: 右 → 左下(斜め) → 右
         const looksLikeZ =
           d1x > MIN_SEGMENT_PX && Math.abs(d1y) < Math.abs(d1x) * 0.6 &&
           d2x < -MIN_SEGMENT_PX && d2y > MIN_SEGMENT_PX &&
           d3x > MIN_SEGMENT_PX && Math.abs(d3y) < Math.abs(d3x) * 0.6;
+        if (looksLikeZ) return "Z";
 
-        if (looksLikeZ) {
-          const params = new URLSearchParams(location.search);
-          const qs = params.toString();
-          location.href = "hotline-chat.html" + (qs ? "?" + qs : "");
-        }
+        // N: 上 → 右下(斜め) → 上
+        const looksLikeN =
+          d1y < -MIN_SEGMENT_PX && Math.abs(d1x) < Math.abs(d1y) * 0.6 &&
+          d2x > MIN_SEGMENT_PX && d2y > MIN_SEGMENT_PX &&
+          d3y < -MIN_SEGMENT_PX && Math.abs(d3x) < Math.abs(d3y) * 0.6;
+        if (looksLikeN) return "N";
+
+        return null;
+      }
+
+      function evaluateGesture() {
+        const shape = classifyGesture();
+        if (!shape) return;
+
+        const identity = GESTURE_IDENTITIES[shape];
+        const params = new URLSearchParams(location.search);
+        params.set("as", identity);
+        location.href = "hotline-chat.html?" + params.toString();
       }
 
       document.addEventListener("pointerdown", onDown);
