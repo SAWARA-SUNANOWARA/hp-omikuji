@@ -15,7 +15,10 @@
       justify-content: center;
       background: #f5f0e8;
       font-family: "Helvetica Neue", "Yu Gothic", "YuGothic", sans-serif;
-      touch-action: pan-y;
+      /* ブラウザの標準スクロール/プルダウン更新にジェスチャーの
+         タッチ操作を奪われないよう、なぞる操作は全てJS側で処理する */
+      touch-action: none;
+      overscroll-behavior: none;
     }
 
     h1 {
@@ -183,6 +186,7 @@
 
       function onMove(e) {
         if (!tracking) return;
+        e.preventDefault();
         points.push({ x: e.clientX, y: e.clientY, t: Date.now() });
       }
 
