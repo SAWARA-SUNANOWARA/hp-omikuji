@@ -218,6 +218,15 @@
     // 有効なセッションが無ければ黙ってfortune.htmlに戻す。
     const IDENTITY_NAMES = { sawara: "サワラ", hiiragi: "ヒイラギ" };
 
+    // ブラウザの「戻る」でこのページに戻ってきたとき、bfcache(離脱前の
+    // 画面をメモリにそのまま残す仕組み)から復元されるとinit()を経由
+    // せず、ログアウト前のチャット画面がそのまま表示されてしまう。
+    // 復元を検知したら強制的に再読み込みし、必ずセッションの有効性を
+    // チェックし直させる。
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) location.reload();
+    });
+
     let hotlineKey = "";
     let myName = "";
     let pollTimer = null;
