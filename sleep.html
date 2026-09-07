@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>睡眠記録</title>
+  <link rel="icon" href="favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest-sleep.json">
+  <meta name="apple-mobile-web-app-title" content="睡眠記録">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#eef1fb">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: #eef1fb;
+      font-family: "Helvetica Neue", "Yu Gothic", "YuGothic", sans-serif;
+      color: #333;
+    }
+
+    body {
+      min-height: 100vh;
+    }
+
+    .screen {
+      display: none;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 20px 18px 110px;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      font-size: 1.4rem;
+      color: #6c7ae0;
+      cursor: pointer;
+      padding: 4px 8px;
+      line-height: 1;
+    }
+
+    .top-title {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #444;
+      letter-spacing: 0.05em;
+    }
+
+    /* ホーム画面 */
+    .home-header {
+      text-align: center;
+      margin: 24px 0 36px;
+    }
+
+    .home-header h1 {
+      font-size: 1.4rem;
+      letter-spacing: 0.15em;
+      color: #444;
+      margin-bottom: 6px;
+    }
+
+    .home-header p {
+      font-size: 0.85rem;
+      color: #999;
+    }
+
+    .home-btn {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      padding: 20px;
+      margin-bottom: 16px;
+      border: none;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(70, 80, 150, 0.08);
+      cursor: pointer;
+      text-align: left;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+
+    .home-btn:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+
+    .home-btn .icon {
+      font-size: 1.8rem;
+    }
+
+    .home-btn .label {
+      font-size: 1.05rem;
+      font-weight: bold;
+      color: #444;
+    }
+
+    .home-btn .sub {
+      font-size: 0.75rem;
+      color: #999;
+      margin-top: 2px;
+    }
+
+    .home-btn.night { background: #6c7ae0; }
+    .home-btn.night .label, .home-btn.night .sub { color: #fff; }
+    .home-btn.night .sub { color: #dfe2fa; }
+
+    .home-btn.morning { background: #ffb35c; }
+    .home-btn.morning .label, .home-btn.morning .sub { color: #fff; }
+    .home-btn.morning .sub { color: #fff3e2; }
+
+    /* フォーム共通 */
+    .badge {
+      display: inline-block;
+      background: #dfe2fa;
+      color: #4650a0;
+      font-size: 0.8rem;
+      padding: 6px 12px;
+      border-radius: 999px;
+      margin-bottom: 4px;
+    }
+
+    .date-label {
+      font-size: 0.8rem;
+      color: #999;
+      margin-bottom: 18px;
+    }
+
+    .field {
+      margin-bottom: 22px;
+    }
+
+    .field-label {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .seg-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .seg-btn {
+      flex: 1;
+      min-width: 64px;
+      padding: 12px 8px;
+      border-radius: 10px;
+      border: 1px solid #d6d9ef;
+      background: #fff;
+      color: #555;
+      font-size: 0.9rem;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .seg-btn.selected {
+      background: #6c7ae0;
+      border-color: #6c7ae0;
+      color: #fff;
+      font-weight: bold;
+    }
+
+    .seg-btn.none-btn {
+      flex: 0 0 auto;
+      min-width: 56px;
+    }
+
+    .rating-row {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .rating-btn {
+      flex: 1;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 1px solid #d6d9ef;
+      background: #fff;
+      color: #555;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    .rating-btn.selected {
+      background: #6c7ae0;
+      border-color: #6c7ae0;
+      color: #fff;
+      font-weight: bold;
+    }
+
+    .time-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="time"] {
+      flex: 1;
+      font-size: 1rem;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #d6d9ef;
+      background: #fff;
+      color: #333;
+    }
+
+    input[type="time"]:disabled {
+      background: #f0f1f8;
+      color: #bbb;
+    }
+
+    .clear-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid #d6d9ef;
+      background: #fff;
+      color: #999;
+      font-size: 1rem;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .save-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 14px 18px 22px;
+      background: linear-gradient(to top, #eef1fb 60%, rgba(238,241,251,0));
+    }
+
+    .save-btn {
+      display: block;
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      background: #6c7ae0;
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    /* 一覧画面 */
+    .list-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(70, 80, 150, 0.08);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .list-date {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #6c7ae0;
+    }
+
+    .list-summary {
+      font-size: 0.85rem;
+      color: #555;
+    }
+
+    .list-refreshed {
+      font-size: 0.75rem;
+      color: #999;
+    }
+
+    .empty-msg {
+      text-align: center;
+      color: #aaa;
+      font-size: 0.9rem;
+      margin-top: 40px;
+    }
+
+    /* 詳細画面 */
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #e3e5f5;
+      font-size: 0.9rem;
+    }
+
+    .detail-row .k {
+      color: #999;
+    }
+
+    .detail-row .v {
+      color: #333;
+      font-weight: bold;
+    }
+
+    .delete-btn {
+      display: block;
+      width: 100%;
+      margin-top: 28px;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      background: #fdeeee;
+      color: #d24545;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ホーム画面 -->
+  <div class="screen active" id="screen-home">
+    <div class="home-header">
+      <h1>睡眠記録</h1>
+      <p>タップだけで記録できます</p>
+    </div>
+
+    <button class="home-btn night" onclick="openNightScreen()">
+      <span class="icon">🌙</span>
+      <span>
+        <div class="label">就寝を記録</div>
+        <div class="sub">寝る前にタップ (約15秒)</div>
+      </span>
+    </button>
+
+    <button class="home-btn morning" onclick="openMorningScreen()">
+      <span class="icon">☀️</span>
+      <span>
+        <div class="label">起床を記録</div>
+        <div class="sub">起きたらタップ (約10秒)</div>
+      </span>
+    </button>
+
+    <button class="home-btn" style="background:#fff;" onclick="openListScreen()">
+      <span class="icon">📋</span>
+      <span>
+        <div class="label" style="color:#444;">記録一覧</div>
+        <div class="sub" style="color:#999;">これまでの記録を見る</div>
+      </span>
+    </button>
+  </div>
+
+  <!-- 夜の記録画面 -->
+  <div class="screen" id="screen-night">
+    <div class="top-bar">
+      <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
+      <div class="top-title">就寝の記録</div>
+    </div>
+    <div class="badge" id="night-bedtime-display"></div>
+    <div class="date-label" id="night-date-label"></div>
+
+    <div id="night-fields"></div>
+
+    <div class="save-bar">
+      <button class="save-btn" onclick="saveNight()">保存する</button>
+    </div>
+  </div>
+
+  <!-- 朝の記録画面 -->
+  <div class="screen" id="screen-morning">
+    <div class="top-bar">
+      <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
+      <div class="top-title">起床の記録</div>
+    </div>
+    <div class="badge" id="morning-wake-display"></div>
+    <div class="date-label" id="morning-date-label"></div>
+
+    <div id="morning-fields"></div>
+
+    <div class="save-bar">
+      <button class="save-btn" onclick="saveMorning()">保存する</button>
+    </div>
+  </div>
+
+  <!-- 一覧画面 -->
+  <div class="screen" id="screen-list">
+    <div class="top-bar">
+      <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
+      <div class="top-title">記録一覧</div>
+    </div>
+    <div id="list-items"></div>
+  </div>
+
+  <!-- 詳細画面 -->
+  <div class="screen" id="screen-detail">
+    <div class="top-bar">
+      <button class="back-btn" onclick="openListScreen()">‹</button>
+      <div class="top-title" id="detail-date-label"></div>
+    </div>
+    <div id="detail-fields"></div>
+    <button class="delete-btn" onclick="deleteDetailRecord()">この記録を削除</button>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "sleepLogRecords_v1";
+
+    const PLACE_LABELS = { home: "自宅", partner: "彼女の家", other: "その他" };
+    const EXERCISE_LABELS = { none: "なし", light: "軽い", hard: "しっかり" };
+
+    // ---- 保存データの読み書き ----
+    function loadRecords() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveRecords(records) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    // ---- 日付・時刻のユーティリティ ----
+    function pad2(n) {
+      return String(n).padStart(2, "0");
+    }
+
+    function dateKey(d) {
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    }
+
+    function timeStr(d) {
+      return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+
+    // 就寝時は日付をまたぐため、正午以降にタップした場合は
+    // 「翌日の朝に起きる」とみなして起床日をキーにする。
+    // 正午より前(日付をまたいで既に朝方)にタップした場合は当日をキーにする。
+    function computeNightWakeDateKey(now) {
+      const d = new Date(now);
+      if (d.getHours() >= 12) {
+        d.setDate(d.getDate() + 1);
+      }
+      return dateKey(d);
+    }
+
+    function showScreen(id) {
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+    }
+
+    // ---- 入力パーツ ----
+    function makeSegField(labelText, options, value, onChange) {
+      const wrap = document.createElement("div");
+      wrap.className = "field";
+      const label = document.createElement("div");
+      label.className = "field-label";
+      label.textContent = labelText;
+      wrap.appendChild(label);
+
+      const group = document.createElement("div");
+      group.className = "seg-group";
+      options.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "seg-btn" + (value === opt.value ? " selected" : "");
+        btn.textContent = opt.label;
+        btn.onclick = () => onChange(value === opt.value ? null : opt.value);
+        group.appendChild(btn);
+      });
+      wrap.appendChild(group);
+      return wrap;
+    }
+
+    function makeRatingField(labelText, value, onChange) {
+      const wrap = document.createElement("div");
+      wrap.className = "field";
+      const label = document.createElement("div");
+      label.className = "field-label";
+      label.textContent = labelText;
+      wrap.appendChild(label);
+
+      const row = document.createElement("div");
+      row.className = "rating-row";
+      for (let i = 1; i <= 5; i++) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "rating-btn" + (value === i ? " selected" : "");
+        btn.textContent = String(i);
+        btn.onclick = () => onChange(value === i ? null : i);
+        row.appendChild(btn);
+      }
+      wrap.appendChild(row);
+      return wrap;
+    }
+
+    // allowNone: 「なし」ボタンを表示するか
+    // onAfterToggle: 「なし」/クリアボタンをタップした直後に呼ぶ再描画関数
+    //  (時刻ホイールの操作中に再描画すると操作が中断されるため、
+    //   連続入力になる input イベントでは再描画しない)
+    function makeTimeField(labelText, value, onChange, options) {
+      options = options || {};
+      const wrap = document.createElement("div");
+      wrap.className = "field";
+      const label = document.createElement("div");
+      label.className = "field-label";
+      label.textContent = labelText;
+      wrap.appendChild(label);
+
+      const row = document.createElement("div");
+      row.className = "time-row";
+
+      const input = document.createElement("input");
+      input.type = "time";
+      input.value = (value && value !== "none") ? value : "";
+      input.disabled = value === "none";
+      input.oninput = () => onChange(input.value || null);
+      row.appendChild(input);
+
+      if (options.allowNone) {
+        const noneBtn = document.createElement("button");
+        noneBtn.type = "button";
+        noneBtn.className = "seg-btn none-btn" + (value === "none" ? " selected" : "");
+        noneBtn.textContent = "なし";
+        noneBtn.onclick = () => {
+          onChange(value === "none" ? null : "none");
+          if (options.onAfterToggle) options.onAfterToggle();
+        };
+        row.appendChild(noneBtn);
+      }
+
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "clear-btn";
+      clearBtn.textContent = "×";
+      clearBtn.setAttribute("aria-label", "クリア");
+      clearBtn.onclick = () => {
+        onChange(null);
+        if (options.onAfterToggle) options.onAfterToggle();
+      };
+      row.appendChild(clearBtn);
+
+      wrap.appendChild(row);
+      return wrap;
+    }
+
+    // ---- 夜の記録 ----
+    let nightDraft = {};
+    let nightDateKey = "";
+
+    function openNightScreen() {
+      const now = new Date();
+      nightDateKey = computeNightWakeDateKey(now);
+      const records = loadRecords();
+      nightDraft = Object.assign({}, records[nightDateKey] || {});
+      nightDraft.bedtime = now.toISOString();
+
+      document.getElementById("night-bedtime-display").textContent =
+        "就寝記録: " + timeStr(now) + "(自動記録)";
+      document.getElementById("night-date-label").textContent =
+        "起床予定日: " + nightDateKey;
+
+      renderNightForm();
+      showScreen("screen-night");
+    }
+
+    function renderNightForm() {
+      const root = document.getElementById("night-fields");
+      root.innerHTML = "";
+
+      root.appendChild(makeTimeField(
+        "外出時刻(家を出た時刻)", nightDraft.leave_home_at,
+        v => { nightDraft.leave_home_at = v; }
+      ));
+
+      root.appendChild(makeTimeField(
+        "帰宅時刻", nightDraft.return_home_at,
+        v => { nightDraft.return_home_at = v; }
+      ));
+
+      root.appendChild(makeSegField(
+        "飲酒量",
+        [{ label: "0杯", value: 0 }, { label: "1杯", value: 1 }, { label: "2杯", value: 2 }, { label: "3杯以上", value: 3 }],
+        nightDraft.alcohol_units,
+        v => { nightDraft.alcohol_units = v; renderNightForm(); }
+      ));
+
+      if (nightDraft.alcohol_units) {
+        root.appendChild(makeTimeField(
+          "最後に飲んだ時刻", nightDraft.alcohol_last_at,
+          v => { nightDraft.alcohol_last_at = v; }
+        ));
+      } else {
+        nightDraft.alcohol_last_at = null;
+      }
+
+      root.appendChild(makeTimeField(
+        "カフェイン摂取時刻", nightDraft.caffeine_last_at,
+        v => { nightDraft.caffeine_last_at = v; },
+        { allowNone: true, onAfterToggle: renderNightForm }
+      ));
+
+      root.appendChild(makeTimeField(
+        "夕食時刻", nightDraft.dinner_at,
+        v => { nightDraft.dinner_at = v; },
+        { allowNone: true, onAfterToggle: renderNightForm }
+      ));
+
+      root.appendChild(makeTimeField(
+        "入浴時刻", nightDraft.bath_at,
+        v => { nightDraft.bath_at = v; },
+        { allowNone: true, onAfterToggle: renderNightForm }
+      ));
+
+      root.appendChild(makeSegField(
+        "就寝場所",
+        [{ label: "自宅", value: "home" }, { label: "彼女の家", value: "partner" }, { label: "その他", value: "other" }],
+        nightDraft.sleep_place,
+        v => { nightDraft.sleep_place = v; renderNightForm(); }
+      ));
+
+      root.appendChild(makeSegField(
+        "運動",
+        [{ label: "なし", value: "none" }, { label: "軽い", value: "light" }, { label: "しっかり", value: "hard" }],
+        nightDraft.exercise,
+        v => { nightDraft.exercise = v; renderNightForm(); }
+      ));
+
+      root.appendChild(makeRatingField(
+        "疲労感 (1:少ない → 5:強い)", nightDraft.fatigue,
+        v => { nightDraft.fatigue = v; renderNightForm(); }
+      ));
+
+      root.appendChild(makeRatingField(
+        "ストレス (1:少ない → 5:強い)", nightDraft.stress,
+        v => { nightDraft.stress = v; renderNightForm(); }
+      ));
+
+      root.appendChild(makeRatingField(
+        "眠気 (1:弱い → 5:強い)", nightDraft.sleepiness,
+        v => { nightDraft.sleepiness = v; renderNightForm(); }
+      ));
+    }
+
+    function saveNight() {
+      const records = loadRecords();
+      records[nightDateKey] = nightDraft;
+      saveRecords(records);
+      showScreen("screen-home");
+    }
+
+    // ---- 朝の記録 ----
+    let morningDraft = {};
+    let morningDateKey = "";
+
+    function openMorningScreen() {
+      const now = new Date();
+      morningDateKey = dateKey(now);
+      const records = loadRecords();
+      morningDraft = Object.assign({}, records[morningDateKey] || {});
+      morningDraft.wake_at = now.toISOString();
+
+      document.getElementById("morning-wake-display").textContent =
+        "起床記録: " + timeStr(now) + "(自動記録)";
+      document.getElementById("morning-date-label").textContent =
+        "記録日: " + morningDateKey;
+
+      renderMorningForm();
+      showScreen("screen-morning");
+    }
+
+    function renderMorningForm() {
+      const root = document.getElementById("morning-fields");
+      root.innerHTML = "";
+      root.appendChild(makeRatingField(
+        "すっきり度 (1:だるい → 5:すっきり)", morningDraft.refreshed,
+        v => { morningDraft.refreshed = v; renderMorningForm(); }
+      ));
+    }
+
+    function saveMorning() {
+      const records = loadRecords();
+      records[morningDateKey] = morningDraft;
+      saveRecords(records);
+      showScreen("screen-home");
+    }
+
+    // ---- 一覧・詳細 ----
+    function sleepDurationText(rec) {
+      if (!rec.bedtime || !rec.wake_at) return "-";
+      const ms = new Date(rec.wake_at) - new Date(rec.bedtime);
+      if (ms <= 0) return "-";
+      const totalMin = Math.round(ms / 60000);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      return h + "時間" + m + "分";
+    }
+
+    function openListScreen() {
+      const records = loadRecords();
+      const dates = Object.keys(records).sort().reverse();
+      const root = document.getElementById("list-items");
+      root.innerHTML = "";
+
+      if (dates.length === 0) {
+        root.innerHTML = '<p class="empty-msg">まだ記録がありません</p>';
+      }
+
+      dates.forEach(dateStr => {
+        const rec = records[dateStr];
+        const bed = rec.bedtime ? timeStr(new Date(rec.bedtime)) : "--:--";
+        const wake = rec.wake_at ? timeStr(new Date(rec.wake_at)) : "--:--";
+        const duration = sleepDurationText(rec);
+
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "list-item";
+        item.innerHTML =
+          '<span class="list-date">' + dateStr + "</span>" +
+          '<span class="list-summary">就寝 ' + bed + " → 起床 " + wake + " (" + duration + ")</span>" +
+          '<span class="list-refreshed">' + (rec.refreshed ? "すっきり度 " + rec.refreshed + " / 5" : "") + "</span>";
+        item.onclick = () => openDetailScreen(dateStr);
+        root.appendChild(item);
+      });
+
+      showScreen("screen-list");
+    }
+
+    function formatTimeOrNone(v) {
+      if (v == null) return "未入力";
+      if (v === "none") return "なし";
+      return v;
+    }
+
+    function formatRating(v) {
+      return v == null ? "未入力" : v + " / 5";
+    }
+
+    let detailDateKey = "";
+
+    function openDetailScreen(dateStr) {
+      detailDateKey = dateStr;
+      const records = loadRecords();
+      const rec = records[dateStr] || {};
+
+      document.getElementById("detail-date-label").textContent = dateStr;
+
+      const root = document.getElementById("detail-fields");
+      root.innerHTML = "";
+
+      const rows = [
+        ["就寝時刻", rec.bedtime ? timeStr(new Date(rec.bedtime)) : "未入力"],
+        ["起床時刻", rec.wake_at ? timeStr(new Date(rec.wake_at)) : "未入力"],
+        ["睡眠時間", sleepDurationText(rec)],
+        ["外出時刻", formatTimeOrNone(rec.leave_home_at)],
+        ["帰宅時刻", formatTimeOrNone(rec.return_home_at)],
+        ["飲酒量", rec.alcohol_units == null ? "未入力" : (rec.alcohol_units >= 3 ? "3杯以上" : rec.alcohol_units + "杯")],
+        ["最後に飲んだ時刻", formatTimeOrNone(rec.alcohol_last_at)],
+        ["カフェイン摂取時刻", formatTimeOrNone(rec.caffeine_last_at)],
+        ["夕食時刻", formatTimeOrNone(rec.dinner_at)],
+        ["入浴時刻", formatTimeOrNone(rec.bath_at)],
+        ["就寝場所", rec.sleep_place ? PLACE_LABELS[rec.sleep_place] : "未入力"],
+        ["運動", rec.exercise ? EXERCISE_LABELS[rec.exercise] : "未入力"],
+        ["疲労感", formatRating(rec.fatigue)],
+        ["ストレス", formatRating(rec.stress)],
+        ["眠気", formatRating(rec.sleepiness)],
+        ["すっきり度", formatRating(rec.refreshed)],
+      ];
+
+      rows.forEach(([k, v]) => {
+        const row = document.createElement("div");
+        row.className = "detail-row";
+        row.innerHTML = '<span class="k">' + k + '</span><span class="v">' + v + "</span>";
+        root.appendChild(row);
+      });
+
+      showScreen("screen-detail");
+    }
+
+    function deleteDetailRecord() {
+      if (!confirm(detailDateKey + " の記録を削除しますか？")) return;
+      const records = loadRecords();
+      delete records[detailDateKey];
+      saveRecords(records);
+      openListScreen();
+    }
+  </script>
+
+</body>
+</html>
