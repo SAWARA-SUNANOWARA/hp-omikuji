@@ -122,16 +122,6 @@
     .home-btn.morning .sub { color: #fff3e2; }
 
     /* フォーム共通 */
-    .badge {
-      display: inline-block;
-      background: #dfe2fa;
-      color: #4650a0;
-      font-size: 0.8rem;
-      padding: 6px 12px;
-      border-radius: 999px;
-      margin-bottom: 4px;
-    }
-
     .date-label {
       font-size: 0.8rem;
       color: #999;
@@ -247,6 +237,32 @@
       border-color: #b98a4e;
       color: #fff;
       font-weight: bold;
+    }
+
+    /* 外出時間帯(なぞって範囲選択) */
+    .away-track {
+      display: flex;
+      height: 44px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #d6d9ef;
+      touch-action: none;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .away-seg {
+      flex: 1;
+      background: #fff;
+      border-right: 1px solid #eef1fb;
+    }
+
+    .away-seg:last-child {
+      border-right: none;
+    }
+
+    .away-seg.selected {
+      background: #6c7ae0;
     }
 
     input[type="time"] {
@@ -472,7 +488,6 @@
       <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
       <div class="top-title">就寝の記録</div>
     </div>
-    <div class="badge" id="night-bedtime-display"></div>
     <div class="date-label" id="night-date-label"></div>
 
     <div id="night-fields"></div>
@@ -488,7 +503,6 @@
       <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
       <div class="top-title">起床の記録</div>
     </div>
-    <div class="badge" id="morning-wake-display"></div>
     <div class="date-label" id="morning-date-label"></div>
 
     <div id="morning-fields"></div>
@@ -640,6 +654,17 @@
       return idx;
     }
 
+    // 範囲外の値(例: 想定より早い/遅い時刻)は、最も近い範囲の端に丸める。
+    // スライダーの位置と表示テキストを常に一致させるために使う。
+    function clampTimeStrToRange(value, opts) {
+      const [h, m] = value.split(":").map(Number);
+      let diff = (h * 60 + m) - opts.startHour * 60;
+      diff = ((diff % 1440) + 1440) % 1440;
+      let idx = Math.round(diff / opts.stepMinutes);
+      idx = Math.max(0, Math.min(opts.totalSteps, idx));
+      return { idx, str: timeIndexToStr(opts.startHour, idx, opts.stepMinutes) };
+    }
+
     function makeRangeTimeField(labelText, value, onChange, opts) {
       const wrap = document.createElement("div");
       wrap.className = "field";
@@ -651,7 +676,8 @@
 
       const valueDisplay = document.createElement("div");
       valueDisplay.className = "range-time-value";
-      valueDisplay.textContent = value || "未設定(スライドして設定)";
+      const clamped = value ? clampTimeStrToRange(value, opts) : null;
+      valueDisplay.textContent = clamped ? clamped.str : "未設定(スライドして設定)";
       wrap.appendChild(valueDisplay);
 
       const row = document.createElement("div");
@@ -663,8 +689,7 @@
       slider.max = String(opts.totalSteps);
       slider.step = "1";
       const defaultIndex = Math.floor(opts.totalSteps / 2);
-      const restoredIndex = value ? timeStrToIndex(value, opts.startHour, opts.stepMinutes, opts.totalSteps) : null;
-      slider.value = String(restoredIndex != null ? restoredIndex : defaultIndex);
+      slider.value = String(clamped ? clamped.idx : defaultIndex);
       slider.oninput = () => {
         const idx = parseInt(slider.value, 10);
         const t = timeIndexToStr(opts.startHour, idx, opts.stepMinutes);
@@ -699,6 +724,118 @@
       return wrap;
     }
 
+    // 「外出していた時間」を指でなぞって範囲選択するタイムライン(30分単位、24時間)。
+    // 出発・帰宅を別々に選ばせるのではなく、一度のドラッグで両方決める。
+    // onChange(startStr, endStr) は範囲確定時のみ呼ぶ("HH:MM" or null,null)。
+    function makeAwayField(labelText, startValue, endValue, onChange) {
+      const SEGMENTS = 48; // 30分 x 48 = 24時間
+
+      const wrap = document.createElement("div");
+      wrap.className = "field";
+
+      const label = document.createElement("div");
+      label.className = "field-label";
+      label.textContent = labelText;
+      wrap.appendChild(label);
+
+      const valueDisplay = document.createElement("div");
+      valueDisplay.className = "range-time-value";
+      wrap.appendChild(valueDisplay);
+
+      const track = document.createElement("div");
+      track.className = "away-track";
+      const segEls = [];
+      for (let i = 0; i < SEGMENTS; i++) {
+        const seg = document.createElement("div");
+        seg.className = "away-seg";
+        track.appendChild(seg);
+        segEls.push(seg);
+      }
+      wrap.appendChild(track);
+
+      const scale = document.createElement("div");
+      scale.className = "range-time-scale";
+      scale.innerHTML = "<span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span>";
+      wrap.appendChild(scale);
+
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "clear-btn";
+      clearBtn.textContent = "×";
+      clearBtn.style.marginTop = "8px";
+      clearBtn.setAttribute("aria-label", "クリア");
+      wrap.appendChild(clearBtn);
+
+      function segIndexToTime(i) {
+        const totalMin = i * 30;
+        return pad2(Math.floor(totalMin / 60)) + ":" + pad2(totalMin % 60);
+      }
+
+      let selStart = null;
+      let selEnd = null; // セグメント番号(両端含む)
+      if (startValue && endValue) {
+        selStart = Math.round(hhmmToMinutes(startValue) / 30);
+        selEnd = Math.max(selStart, Math.round(hhmmToMinutes(endValue) / 30) - 1);
+      }
+
+      function render() {
+        segEls.forEach((el, i) => {
+          el.classList.toggle("selected", selStart != null && i >= selStart && i <= selEnd);
+        });
+        valueDisplay.textContent = selStart != null
+          ? segIndexToTime(selStart) + " 〜 " + segIndexToTime(selEnd + 1)
+          : "未設定(なぞって設定)";
+      }
+      render();
+
+      function indexFromClientX(clientX) {
+        const rect = track.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+        return Math.min(SEGMENTS - 1, Math.floor(ratio * SEGMENTS));
+      }
+
+      let dragStartIndex = null;
+
+      track.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        track.setPointerCapture(e.pointerId);
+        dragStartIndex = indexFromClientX(e.clientX);
+        selStart = dragStartIndex;
+        selEnd = dragStartIndex;
+        render();
+      });
+
+      track.addEventListener("pointermove", e => {
+        if (dragStartIndex == null) return;
+        const idx = indexFromClientX(e.clientX);
+        selStart = Math.min(dragStartIndex, idx);
+        selEnd = Math.max(dragStartIndex, idx);
+        render();
+      });
+
+      function finishDrag() {
+        if (dragStartIndex == null) return;
+        dragStartIndex = null;
+        onChange(segIndexToTime(selStart), segIndexToTime(selEnd + 1));
+      }
+      track.addEventListener("pointerup", finishDrag);
+      track.addEventListener("pointercancel", finishDrag);
+
+      clearBtn.onclick = () => {
+        selStart = null;
+        selEnd = null;
+        render();
+        onChange(null, null);
+      };
+
+      return wrap;
+    }
+
+    function hhmmToMinutes(v) {
+      const [h, m] = v.split(":").map(Number);
+      return h * 60 + m;
+    }
+
     // ---- 夜の記録 ----
     let nightDraft = {};
     let nightDateKey = "";
@@ -708,10 +845,11 @@
       nightDateKey = computeNightWakeDateKey(now);
       const records = loadRecords();
       nightDraft = Object.assign({}, records[nightDateKey] || {});
-      nightDraft.bedtime = now.toISOString();
+      // 「今」を初期値にしておくが、スライダーで調整したり後から入力し直すこともできる
+      if (!nightDraft.bedtime) {
+        nightDraft.bedtime = now.toISOString();
+      }
 
-      document.getElementById("night-bedtime-display").textContent =
-        "就寝記録: " + timeStr(now) + "(自動記録)";
       document.getElementById("night-date-label").textContent =
         "起床予定日: " + nightDateKey;
 
@@ -719,11 +857,18 @@
       showScreen("screen-night");
     }
 
-    // 夜は「忘れがちなもの」だけに絞る(飲酒)。カフェインは別メニュー、
+    // 夜は「忘れがちなもの」だけに絞る(寝入り・飲酒)。カフェインは別メニュー、
     // 就寝場所・外出/帰宅時刻・起床時刻は翌朝まとめて記録する。
     function renderNightForm() {
       const root = document.getElementById("night-fields");
       root.innerHTML = "";
+
+      const bedtimeStr = nightDraft.bedtime ? timeStr(new Date(nightDraft.bedtime)) : null;
+      root.appendChild(makeRangeTimeField(
+        "寝入り時刻", bedtimeStr,
+        v => { nightDraft.bedtime = v ? combineDateAndTime(nightDateKey, v) : null; },
+        { startHour: 20, totalSteps: 16, stepMinutes: 30 }
+      ));
 
       root.appendChild(makeSegField(
         "飲酒",
@@ -764,10 +909,11 @@
       morningDateKey = dateKey(now);
       const records = loadRecords();
       morningDraft = Object.assign({}, records[morningDateKey] || {});
-      morningDraft.wake_at = now.toISOString();
+      // 「今」を初期値にしておくが、スライダーで調整したり後から入力し直すこともできる
+      if (!morningDraft.wake_at) {
+        morningDraft.wake_at = now.toISOString();
+      }
 
-      document.getElementById("morning-wake-display").textContent =
-        "起床記録: " + timeStr(now) + "(自動記録)";
       document.getElementById("morning-date-label").textContent =
         "記録日: " + morningDateKey;
 
@@ -776,10 +922,17 @@
     }
 
     // 前夜〜今朝にかけての「時刻を覚えていれば十分」な項目は
-    // 起床時にまとめて記録する(就寝場所・外出/帰宅時刻)。
+    // 起床時にまとめて記録する(就寝場所・外出していた時間)。
     function renderMorningForm() {
       const root = document.getElementById("morning-fields");
       root.innerHTML = "";
+
+      const wakeStr = morningDraft.wake_at ? timeStr(new Date(morningDraft.wake_at)) : null;
+      root.appendChild(makeRangeTimeField(
+        "起床時刻", wakeStr,
+        v => { morningDraft.wake_at = v ? combineMorningDateAndTime(morningDateKey, v) : null; },
+        { startHour: 5, totalSteps: 12, stepMinutes: 30 }
+      ));
 
       root.appendChild(makeRatingField(
         "すっきり度 (1:だるい → 5:すっきり)", morningDraft.refreshed,
@@ -793,16 +946,9 @@
         v => { morningDraft.sleep_place = v; renderMorningForm(); }
       ));
 
-      root.appendChild(makeRangeTimeField(
-        "外出時刻(前日、家を出た時刻)", morningDraft.leave_home_at,
-        v => { morningDraft.leave_home_at = v; },
-        { startHour: 5, totalSteps: 12, stepMinutes: 30 }
-      ));
-
-      root.appendChild(makeRangeTimeField(
-        "帰宅時刻(前日)", morningDraft.return_home_at,
-        v => { morningDraft.return_home_at = v; },
-        { startHour: 20, totalSteps: 16, stepMinutes: 30 }
+      root.appendChild(makeAwayField(
+        "外出していた時間(前日)", morningDraft.leave_home_at, morningDraft.return_home_at,
+        (start, end) => { morningDraft.leave_home_at = start; morningDraft.return_home_at = end; }
       ));
     }
 
@@ -1013,14 +1159,21 @@
       root.appendChild(addRow);
     }
 
-    // 手動追加は時刻のみ選ぶので、この記録の起床予定日を基準に
-    // 「夜(正午以降)の時刻ならその前日、それ以外はその日」の日付を補って保存する。
+    // 時刻のみ選んだ値に、この記録の起床予定日を基準に日付を補って保存する。
+    // 「夜(正午以降)の時刻ならその前日、それ以外はその日」とみなす(寝入り・中途覚醒用)。
     function combineDateAndTime(dateKeyStr, timeValue) {
       const [h, m] = timeValue.split(":").map(Number);
       const [y, mo, d] = dateKeyStr.split("-").map(Number);
       const dt = new Date(y, mo - 1, d, h, m, 0, 0);
       if (h >= 12) dt.setDate(dt.getDate() - 1);
       return dt.toISOString();
+    }
+
+    // 起床時刻は常に記録日当日の朝の時間帯なので、日付をずらさずそのまま組み立てる。
+    function combineMorningDateAndTime(dateKeyStr, timeValue) {
+      const [h, m] = timeValue.split(":").map(Number);
+      const [y, mo, d] = dateKeyStr.split("-").map(Number);
+      return new Date(y, mo - 1, d, h, m, 0, 0).toISOString();
     }
 
     function addAwakening(timeValue) {
