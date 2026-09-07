@@ -174,11 +174,6 @@
       font-weight: bold;
     }
 
-    .seg-btn.none-btn {
-      flex: 0 0 auto;
-      min-width: 56px;
-    }
-
     .rating-row {
       display: flex;
       gap: 8px;
@@ -203,10 +198,55 @@
       font-weight: bold;
     }
 
-    .time-row {
+    .range-time-value {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #6c7ae0;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .range-time-row {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      height: 36px;
+      accent-color: #6c7ae0;
+    }
+
+    .range-time-scale {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: #aaa;
+      margin-top: 4px;
+    }
+
+    .stamp-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .stamp-btn {
+      aspect-ratio: 1;
+      border-radius: 12px;
+      border: 1px solid #d6d9ef;
+      background: #fff;
+      color: #666;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    .stamp-btn.selected {
+      background: #b98a4e;
+      border-color: #b98a4e;
+      color: #fff;
+      font-weight: bold;
     }
 
     input[type="time"] {
@@ -399,6 +439,14 @@
       </span>
     </button>
 
+    <button class="home-btn" style="background:#fff;" onclick="openCaffeineScreen()">
+      <span class="icon">☕</span>
+      <span>
+        <div class="label" style="color:#444;">カフェインを記録</div>
+        <div class="sub" style="color:#999;">飲んだ時間帯をタップ (いつでもOK)</div>
+      </span>
+    </button>
+
     <button class="home-btn" style="background:#fff;" onclick="recordAwakening()">
       <span class="icon">🌛</span>
       <span>
@@ -450,6 +498,17 @@
     </div>
   </div>
 
+  <!-- カフェイン記録画面 -->
+  <div class="screen" id="screen-caffeine">
+    <div class="top-bar">
+      <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
+      <div class="top-title">カフェイン記録</div>
+    </div>
+    <div class="date-label" id="caffeine-date-label"></div>
+    <div class="field-label">飲んだ時間帯をタップ(何回でもOK、押すたびに保存)</div>
+    <div class="stamp-grid" id="caffeine-grid"></div>
+  </div>
+
   <!-- 一覧画面 -->
   <div class="screen" id="screen-list">
     <div class="top-bar">
@@ -473,6 +532,7 @@
     const STORAGE_KEY = "sleepLogRecords_v1";
 
     const PLACE_LABELS = { home: "自宅", partner: "彼女の家", other: "その他" };
+    const ALCOHOL_LABELS = { none: "なし", tipsy: "ほろ酔い", drunk: "しっかり酔い", wasted: "酩酊" };
 
     // ---- 保存データの読み書き ----
     function loadRecords() {
@@ -561,41 +621,57 @@
       return wrap;
     }
 
-    // allowNone: 「なし」ボタンを表示するか
-    // onAfterToggle: 「なし」/クリアボタンをタップした直後に呼ぶ再描画関数
-    //  (時刻ホイールの操作中に再描画すると操作が中断されるため、
-    //   連続入力になる input イベントでは再描画しない)
-    function makeTimeField(labelText, value, onChange, options) {
-      options = options || {};
+    // スライダー(シークバー)による時刻選択。ホイールが苦手なため、
+    // 「朝(5:00〜11:00)」「夜(20:00〜翌4:00)」など想定される範囲に絞って
+    // 短いスライダーで選べるようにする。opts: { startHour, totalSteps, stepMinutes }
+    function timeIndexToStr(startHour, index, stepMinutes) {
+      const totalMinutes = (startHour * 60 + index * stepMinutes + 1440) % 1440;
+      const h = Math.floor(totalMinutes / 60);
+      const m = totalMinutes % 60;
+      return pad2(h) + ":" + pad2(m);
+    }
+
+    function timeStrToIndex(value, startHour, stepMinutes, totalSteps) {
+      const [h, m] = value.split(":").map(Number);
+      let diff = (h * 60 + m) - startHour * 60;
+      diff = ((diff % 1440) + 1440) % 1440;
+      const idx = Math.round(diff / stepMinutes);
+      if (idx < 0 || idx > totalSteps) return null;
+      return idx;
+    }
+
+    function makeRangeTimeField(labelText, value, onChange, opts) {
       const wrap = document.createElement("div");
       wrap.className = "field";
+
       const label = document.createElement("div");
       label.className = "field-label";
       label.textContent = labelText;
       wrap.appendChild(label);
 
+      const valueDisplay = document.createElement("div");
+      valueDisplay.className = "range-time-value";
+      valueDisplay.textContent = value || "未設定(スライドして設定)";
+      wrap.appendChild(valueDisplay);
+
       const row = document.createElement("div");
-      row.className = "time-row";
+      row.className = "range-time-row";
 
-      const input = document.createElement("input");
-      input.type = "time";
-      input.step = 1800; // 30分刻み(1分刻みは手間なので固定)
-      input.value = (value && value !== "none") ? value : "";
-      input.disabled = value === "none";
-      input.oninput = () => onChange(input.value || null);
-      row.appendChild(input);
-
-      if (options.allowNone) {
-        const noneBtn = document.createElement("button");
-        noneBtn.type = "button";
-        noneBtn.className = "seg-btn none-btn" + (value === "none" ? " selected" : "");
-        noneBtn.textContent = "なし";
-        noneBtn.onclick = () => {
-          onChange(value === "none" ? null : "none");
-          if (options.onAfterToggle) options.onAfterToggle();
-        };
-        row.appendChild(noneBtn);
-      }
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = "0";
+      slider.max = String(opts.totalSteps);
+      slider.step = "1";
+      const defaultIndex = Math.floor(opts.totalSteps / 2);
+      const restoredIndex = value ? timeStrToIndex(value, opts.startHour, opts.stepMinutes, opts.totalSteps) : null;
+      slider.value = String(restoredIndex != null ? restoredIndex : defaultIndex);
+      slider.oninput = () => {
+        const idx = parseInt(slider.value, 10);
+        const t = timeIndexToStr(opts.startHour, idx, opts.stepMinutes);
+        valueDisplay.textContent = t;
+        onChange(t);
+      };
+      row.appendChild(slider);
 
       const clearBtn = document.createElement("button");
       clearBtn.type = "button";
@@ -604,11 +680,22 @@
       clearBtn.setAttribute("aria-label", "クリア");
       clearBtn.onclick = () => {
         onChange(null);
-        if (options.onAfterToggle) options.onAfterToggle();
+        valueDisplay.textContent = "未設定(スライドして設定)";
       };
       row.appendChild(clearBtn);
 
       wrap.appendChild(row);
+
+      const scale = document.createElement("div");
+      scale.className = "range-time-scale";
+      const startLabel = document.createElement("span");
+      startLabel.textContent = timeIndexToStr(opts.startHour, 0, opts.stepMinutes);
+      const endLabel = document.createElement("span");
+      endLabel.textContent = timeIndexToStr(opts.startHour, opts.totalSteps, opts.stepMinutes);
+      scale.appendChild(startLabel);
+      scale.appendChild(endLabel);
+      wrap.appendChild(scale);
+
       return wrap;
     }
 
@@ -632,29 +719,29 @@
       showScreen("screen-night");
     }
 
-    // 夜は「忘れがちなもの」だけに絞る(カフェイン・飲酒)。
+    // 夜は「忘れがちなもの」だけに絞る(飲酒)。カフェインは別メニュー、
     // 就寝場所・外出/帰宅時刻・起床時刻は翌朝まとめて記録する。
     function renderNightForm() {
       const root = document.getElementById("night-fields");
       root.innerHTML = "";
 
-      root.appendChild(makeTimeField(
-        "カフェイン摂取時刻", nightDraft.caffeine_last_at,
-        v => { nightDraft.caffeine_last_at = v; },
-        { allowNone: true, onAfterToggle: renderNightForm }
-      ));
-
       root.appendChild(makeSegField(
-        "飲酒量",
-        [{ label: "0杯", value: 0 }, { label: "1杯", value: 1 }, { label: "2杯", value: 2 }, { label: "3杯以上", value: 3 }],
-        nightDraft.alcohol_units,
-        v => { nightDraft.alcohol_units = v; renderNightForm(); }
+        "飲酒",
+        [
+          { label: "なし", value: "none" },
+          { label: "ほろ酔い", value: "tipsy" },
+          { label: "しっかり酔い", value: "drunk" },
+          { label: "酩酊", value: "wasted" },
+        ],
+        nightDraft.alcohol_level,
+        v => { nightDraft.alcohol_level = v; renderNightForm(); }
       ));
 
-      if (nightDraft.alcohol_units) {
-        root.appendChild(makeTimeField(
+      if (nightDraft.alcohol_level && nightDraft.alcohol_level !== "none") {
+        root.appendChild(makeRangeTimeField(
           "最後に飲んだ時刻", nightDraft.alcohol_last_at,
-          v => { nightDraft.alcohol_last_at = v; }
+          v => { nightDraft.alcohol_last_at = v; },
+          { startHour: 20, totalSteps: 16, stepMinutes: 30 }
         ));
       } else {
         nightDraft.alcohol_last_at = null;
@@ -706,14 +793,16 @@
         v => { morningDraft.sleep_place = v; renderMorningForm(); }
       ));
 
-      root.appendChild(makeTimeField(
+      root.appendChild(makeRangeTimeField(
         "外出時刻(前日、家を出た時刻)", morningDraft.leave_home_at,
-        v => { morningDraft.leave_home_at = v; }
+        v => { morningDraft.leave_home_at = v; },
+        { startHour: 5, totalSteps: 12, stepMinutes: 30 }
       ));
 
-      root.appendChild(makeTimeField(
+      root.appendChild(makeRangeTimeField(
         "帰宅時刻(前日)", morningDraft.return_home_at,
-        v => { morningDraft.return_home_at = v; }
+        v => { morningDraft.return_home_at = v; },
+        { startHour: 20, totalSteps: 16, stepMinutes: 30 }
       ));
     }
 
@@ -744,6 +833,47 @@
       records[key] = rec;
       saveRecords(records);
       showToast("記録しました " + timeStr(now) + "(今夜" + awakenings.length + "回目)");
+    }
+
+    // ---- カフェイン(スタンプカード形式、いつでも追記できる別メニュー) ----
+    let caffeineDateKey = "";
+
+    function openCaffeineScreen() {
+      caffeineDateKey = computeNightWakeDateKey(new Date());
+      document.getElementById("caffeine-date-label").textContent = "記録日: " + caffeineDateKey;
+      renderCaffeineGrid();
+      showScreen("screen-caffeine");
+    }
+
+    function renderCaffeineGrid() {
+      const records = loadRecords();
+      const rec = records[caffeineDateKey] || {};
+      const hours = rec.caffeine_hours || [];
+
+      const grid = document.getElementById("caffeine-grid");
+      grid.innerHTML = "";
+      for (let h = 0; h < 24; h++) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "stamp-btn" + (hours.includes(h) ? " selected" : "");
+        btn.textContent = h + "時";
+        btn.onclick = () => toggleCaffeineHour(h);
+        grid.appendChild(btn);
+      }
+    }
+
+    function toggleCaffeineHour(h) {
+      const records = loadRecords();
+      const rec = Object.assign({}, records[caffeineDateKey] || {});
+      const hours = (rec.caffeine_hours || []).slice();
+      const idx = hours.indexOf(h);
+      if (idx >= 0) hours.splice(idx, 1);
+      else hours.push(h);
+      hours.sort((a, b) => a - b);
+      rec.caffeine_hours = hours;
+      records[caffeineDateKey] = rec;
+      saveRecords(records);
+      renderCaffeineGrid();
     }
 
     // ---- 一覧・詳細 ----
@@ -826,9 +956,9 @@
         ["就寝場所", rec.sleep_place ? PLACE_LABELS[rec.sleep_place] : "未入力"],
         ["外出時刻(前日)", formatTimeOrNone(rec.leave_home_at)],
         ["帰宅時刻(前日)", formatTimeOrNone(rec.return_home_at)],
-        ["飲酒量", rec.alcohol_units == null ? "未入力" : (rec.alcohol_units >= 3 ? "3杯以上" : rec.alcohol_units + "杯")],
+        ["飲酒", rec.alcohol_level ? ALCOHOL_LABELS[rec.alcohol_level] : "未入力"],
         ["最後に飲んだ時刻", formatTimeOrNone(rec.alcohol_last_at)],
-        ["カフェイン摂取時刻", formatTimeOrNone(rec.caffeine_last_at)],
+        ["カフェイン摂取", (rec.caffeine_hours && rec.caffeine_hours.length) ? rec.caffeine_hours.map(h => h + "時").join("、") : "未入力"],
         ["すっきり度", formatRating(rec.refreshed)],
       ];
 
