@@ -414,48 +414,6 @@
       cursor: pointer;
     }
 
-    /* 中途覚醒(詳細画面) */
-    .awakening-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 0;
-    }
-
-    .awakening-time {
-      font-size: 0.9rem;
-      color: #333;
-    }
-
-    .awakening-add {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 8px;
-    }
-
-    /* ホーム画面のトースト通知 */
-    .toast {
-      position: fixed;
-      left: 50%;
-      bottom: 32px;
-      transform: translateX(-50%) translateY(10px);
-      background: #444;
-      color: #fff;
-      padding: 10px 20px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.25s ease, transform 0.25s ease;
-      white-space: nowrap;
-      z-index: 10;
-    }
-
-    .toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
   </style>
 </head>
 <body>
@@ -491,14 +449,6 @@
       </span>
     </button>
 
-    <button class="home-btn" style="background:#fff;" onclick="recordAwakening()">
-      <span class="icon">🌛</span>
-      <span>
-        <div class="label" style="color:#444;">中途覚醒を記録</div>
-        <div class="sub" style="color:#999;">夜中に目が覚めたらタップ (1秒)</div>
-      </span>
-    </button>
-
     <button class="home-btn" style="background:#fff;" onclick="openListScreen()">
       <span class="icon">📋</span>
       <span>
@@ -507,8 +457,6 @@
       </span>
     </button>
   </div>
-
-  <div class="toast" id="toast"></div>
 
   <!-- 夜の記録画面 -->
   <div class="screen" id="screen-night">
@@ -766,18 +714,32 @@
       return wrap;
     }
 
-    // 「外出していた時間」を指でなぞって記録するタイムライン(30分単位、24時間)。
+    // 時間帯を指でなぞって記録するタイムライン(30分単位)。「外出していた時間」用に
+    // 作ったもので、「中途覚醒していた時間」にも同じ作りを流用する(opts.rowsで
+    // 表示する時間帯を行ごとに指定する。外出=0-12時/12-24時の2段、
+    // 中途覚醒=22-翌10時の1段、など)。
     // 1段48マスだと目盛が細かすぎて押しにくい & 1回のドラッグでは範囲が1つしか
-    // 作れなかったため、2段組(12時間x2段、1マスの幅を2倍に)にし、
+    // 作れなかったため、1段を12時間までにして1マスの幅を確保し、
     // なぞった部分を「そのストロークの塗り方向」で塗る(オセロ的な反転ではなく、
     // 1本指でなぞった範囲を選択/解除のどちらかに統一)方式にする。
     // これにより、誤って1マスだけ触れても同じ場所をもう一度タップし直せば戻せるし、
-    // 何回かに分けて別々の外出区間を記録できる。
-    // periods: [{from:"HH:MM", to:"HH:MM"}, ...]  onChange(periods)
-    function makeAwayField(labelText, periods, onChange) {
-      const SEGMENTS_PER_ROW = 24; // 12時間 ÷ 30分
-      const ROW_COUNT = 2;
-      const TOTAL = SEGMENTS_PER_ROW * ROW_COUNT;
+    // 何回かに分けて別々の区間を記録できる。
+    // opts.rows: [{ startHour, hours }, ...]  periods: [{from:"HH:MM", to:"HH:MM"}, ...]
+    function makeTimelineField(labelText, periods, onChange, opts) {
+      const SEGMENT_MINUTES = 30;
+      const rows = opts.rows;
+
+      // 各行のマスを、実際の時計上の分(0-1439, 深夜0時基準)に対応付けておく。
+      // 行をこの順で連結した配列が「表示順=時系列」になるように、
+      // 隣り合う行は必ず連続した時間帯になるよう呼び出し側で指定すること。
+      const segMeta = [];
+      rows.forEach(row => {
+        const segCount = (row.hours * 60) / SEGMENT_MINUTES;
+        for (let i = 0; i < segCount; i++) {
+          segMeta.push({ absMin: (row.startHour * 60 + i * SEGMENT_MINUTES) % 1440 });
+        }
+      });
+      const TOTAL = segMeta.length;
 
       const wrap = document.createElement("div");
       wrap.className = "field";
@@ -791,16 +753,23 @@
       valueDisplay.className = "range-time-value";
       wrap.appendChild(valueDisplay);
 
-      function segIndexToTime(i) {
-        const totalMin = i * 30;
-        return pad2(Math.floor(totalMin / 60)) + ":" + pad2(totalMin % 60);
+      function formatMin(min) {
+        return pad2(Math.floor(min / 60)) + ":" + pad2(min % 60);
+      }
+
+      function findIndexForAbsMin(min) {
+        return segMeta.findIndex(m => m.absMin === min);
       }
 
       const selected = new Array(TOTAL).fill(false);
       (periods || []).forEach(p => {
-        const s = Math.round(hhmmToMinutes(p.from) / 30);
-        const e = Math.round(hhmmToMinutes(p.to) / 30);
-        for (let i = Math.max(0, s); i < Math.min(TOTAL, e); i++) selected[i] = true;
+        let cur = hhmmToMinutes(p.from);
+        const end = hhmmToMinutes(p.to);
+        for (let guard = 0; guard < TOTAL && cur !== end; guard++) {
+          const idx = findIndexForAbsMin(cur % 1440);
+          if (idx >= 0) selected[idx] = true;
+          cur = (cur + SEGMENT_MINUTES) % 1440;
+        }
       });
 
       function computePeriods() {
@@ -810,7 +779,8 @@
           if (i < TOTAL && selected[i]) {
             if (start == null) start = i;
           } else if (start != null) {
-            result.push({ from: segIndexToTime(start), to: segIndexToTime(i) });
+            const toMin = (segMeta[i - 1].absMin + SEGMENT_MINUTES) % 1440;
+            result.push({ from: formatMin(segMeta[start].absMin), to: formatMin(toMin) });
             start = null;
           }
         }
@@ -827,15 +797,16 @@
           : "未設定(なぞって設定)";
       }
 
-      function buildRow(rowIndex) {
+      function buildRow(row, baseIndex) {
+        const segCount = (row.hours * 60) / SEGMENT_MINUTES;
         const track = document.createElement("div");
         track.className = "away-track";
 
-        for (let i = 0; i < SEGMENTS_PER_ROW; i++) {
+        for (let i = 0; i < segCount; i++) {
           const seg = document.createElement("div");
           seg.className = "away-seg";
           track.appendChild(seg);
-          segEls[rowIndex * SEGMENTS_PER_ROW + i] = seg;
+          segEls[baseIndex + i] = seg;
         }
 
         let paintValue = null; // このストロークで塗る値(true=選択/false=解除)
@@ -844,14 +815,14 @@
         function indexFromClientX(clientX) {
           const rect = track.getBoundingClientRect();
           const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-          return Math.min(SEGMENTS_PER_ROW - 1, Math.floor(ratio * SEGMENTS_PER_ROW));
+          return Math.min(segCount - 1, Math.floor(ratio * segCount));
         }
 
         function paintRangeTo(idx) {
           const lo = Math.min(lastIndex, idx);
           const hi = Math.max(lastIndex, idx);
           for (let i = lo; i <= hi; i++) {
-            selected[rowIndex * SEGMENTS_PER_ROW + i] = paintValue;
+            selected[baseIndex + i] = paintValue;
           }
           lastIndex = idx;
         }
@@ -860,9 +831,9 @@
           e.preventDefault();
           track.setPointerCapture(e.pointerId);
           const idx = indexFromClientX(e.clientX);
-          paintValue = !selected[rowIndex * SEGMENTS_PER_ROW + idx];
+          paintValue = !selected[baseIndex + idx];
           lastIndex = idx;
-          selected[rowIndex * SEGMENTS_PER_ROW + idx] = paintValue;
+          selected[baseIndex + idx] = paintValue;
           renderCells();
         });
 
@@ -886,14 +857,25 @@
         return track;
       }
 
-      for (let r = 0; r < ROW_COUNT; r++) {
-        wrap.appendChild(buildRow(r));
+      let baseIndex = 0;
+      rows.forEach(row => {
+        const segCount = (row.hours * 60) / SEGMENT_MINUTES;
+        wrap.appendChild(buildRow(row, baseIndex));
+
         const scale = document.createElement("div");
         scale.className = "range-time-scale";
-        const startH = r * 12;
-        scale.innerHTML = "<span>" + startH + ":00</span><span>" + (startH + 6) + ":00</span><span>" + (startH + 12) + ":00</span>";
+        const tickCount = 3; // 開始・中間・終了の3点(1時間単位、"6:00"ではなく"6"で表示)
+        const ticks = [];
+        for (let t = 0; t < tickCount; t++) {
+          const rawHour = row.startHour + (row.hours * t) / (tickCount - 1);
+          const displayHour = rawHour === 24 ? 24 : ((rawHour % 24) + 24) % 24;
+          ticks.push("<span>" + displayHour + "</span>");
+        }
+        scale.innerHTML = ticks.join("");
         wrap.appendChild(scale);
-      }
+
+        baseIndex += segCount;
+      });
 
       const clearBtn = document.createElement("button");
       clearBtn.type = "button";
@@ -1053,65 +1035,17 @@
         v => { morningDraft.sleep_place = v; renderMorningForm(); }
       ));
 
-      root.appendChild(makeAwayField(
+      root.appendChild(makeTimelineField(
         "外出していた時間(前日、複数回もOK)", morningDraft.away_periods || [],
-        periods => { morningDraft.away_periods = periods; }
+        periods => { morningDraft.away_periods = periods; },
+        { rows: [{ startHour: 0, hours: 12 }, { startHour: 12, hours: 12 }] }
       ));
 
-      root.appendChild(makeAwakeningField(
-        morningDraft.awakenings || [],
-        list => { morningDraft.awakenings = list; renderMorningForm(); }
+      root.appendChild(makeTimelineField(
+        "中途覚醒していた時間(前夜22時〜翌10時、複数回もOK)", morningDraft.awake_periods || [],
+        periods => { morningDraft.awake_periods = periods; },
+        { rows: [{ startHour: 22, hours: 12 }] }
       ));
-    }
-
-    // 中途覚醒は夜中に自分でタップして記録する以外に、朝まとめて後から
-    // 入力・訂正できるようにする(ホーム画面のワンタップ記録と併用できる)。
-    function makeAwakeningField(awakenings, onChange) {
-      const wrap = document.createElement("div");
-      wrap.className = "field";
-
-      const label = document.createElement("div");
-      label.className = "field-label";
-      label.textContent = "中途覚醒 (" + awakenings.length + "回)";
-      wrap.appendChild(label);
-
-      awakenings.forEach((aw, i) => {
-        const row = document.createElement("div");
-        row.className = "awakening-row";
-        const time = document.createElement("span");
-        time.className = "awakening-time";
-        time.textContent = timeStr(new Date(aw.at));
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "clear-btn";
-        removeBtn.textContent = "×";
-        removeBtn.onclick = () => onChange(awakenings.filter((_, j) => j !== i));
-        row.appendChild(time);
-        row.appendChild(removeBtn);
-        wrap.appendChild(row);
-      });
-
-      const addRow = document.createElement("div");
-      addRow.className = "awakening-add";
-      const addInput = document.createElement("input");
-      addInput.type = "time";
-      addInput.step = 1800;
-      const addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "seg-btn";
-      addBtn.style.flex = "0 0 auto";
-      addBtn.textContent = "追加";
-      addBtn.onclick = () => {
-        if (!addInput.value) return;
-        const list = awakenings.concat([{ at: combineDateAndTime(morningDateKey, addInput.value) }]);
-        list.sort((a, b) => new Date(a.at) - new Date(b.at));
-        onChange(list);
-      };
-      addRow.appendChild(addInput);
-      addRow.appendChild(addBtn);
-      wrap.appendChild(addRow);
-
-      return wrap;
     }
 
     function saveMorning() {
@@ -1119,28 +1053,6 @@
       records[morningDateKey] = morningDraft;
       saveRecords(records);
       showScreen("screen-home");
-    }
-
-    // ---- 中途覚醒(ホームから1タップで即記録) ----
-    function showToast(message) {
-      const toast = document.getElementById("toast");
-      toast.textContent = message;
-      toast.classList.add("show");
-      clearTimeout(showToast._timer);
-      showToast._timer = setTimeout(() => toast.classList.remove("show"), 1800);
-    }
-
-    function recordAwakening() {
-      const now = new Date();
-      const key = computeNightWakeDateKey(now);
-      const records = loadRecords();
-      const rec = Object.assign({}, records[key] || {});
-      const awakenings = (rec.awakenings || []).slice();
-      awakenings.push({ at: now.toISOString() });
-      rec.awakenings = awakenings;
-      records[key] = rec;
-      saveRecords(records);
-      showToast("記録しました " + timeStr(now) + "(今夜" + awakenings.length + "回目)");
     }
 
     // ---- カフェイン(スタンプカード形式、いつでも追記できる別メニュー) ----
@@ -1211,7 +1123,7 @@
         const wake = rec.wake_at ? timeStr(new Date(rec.wake_at)) : "--:--";
         const duration = sleepDurationText(rec);
 
-        const awakeningCount = (rec.awakenings || []).length;
+        const awakeningCount = (rec.awake_periods || []).length;
         const subParts = [];
         if (rec.refreshed) subParts.push("すっきり度 " + rec.refreshed + " / 5");
         if (awakeningCount > 0) subParts.push("中途覚醒 " + awakeningCount + "回");
@@ -1265,6 +1177,9 @@
         ["外出していた時間(前日)", (rec.away_periods && rec.away_periods.length)
           ? rec.away_periods.map(p => p.from + "〜" + p.to).join("、")
           : "未入力"],
+        ["中途覚醒していた時間", (rec.awake_periods && rec.awake_periods.length)
+          ? rec.awake_periods.map(p => p.from + "〜" + p.to).join("、")
+          : "未入力"],
         ["飲酒", rec.alcohol_level ? ALCOHOL_LABELS[rec.alcohol_level] : "未入力"],
         ["最後に飲んだ時刻", formatTimeOrNone(rec.alcohol_last_at)],
         ["カフェイン摂取", (rec.caffeine_hours && rec.caffeine_hours.length) ? rec.caffeine_hours.map(h => h + "時").join("、") : "未入力"],
@@ -1277,53 +1192,10 @@
         row.innerHTML = '<span class="k">' + k + '</span><span class="v">' + v + "</span>";
         root.appendChild(row);
       });
-
-      // 中途覚醒: 一覧+個別削除+手動追加
-      const awakenings = rec.awakenings || [];
-
-      const awLabel = document.createElement("div");
-      awLabel.className = "field-label";
-      awLabel.style.marginTop = "18px";
-      awLabel.textContent = "中途覚醒 (" + awakenings.length + "回)";
-      root.appendChild(awLabel);
-
-      awakenings.forEach((aw, i) => {
-        const row = document.createElement("div");
-        row.className = "awakening-row";
-        const time = document.createElement("span");
-        time.className = "awakening-time";
-        time.textContent = timeStr(new Date(aw.at));
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "clear-btn";
-        removeBtn.textContent = "×";
-        removeBtn.onclick = () => removeAwakening(i);
-        row.appendChild(time);
-        row.appendChild(removeBtn);
-        root.appendChild(row);
-      });
-
-      const addRow = document.createElement("div");
-      addRow.className = "awakening-add";
-      const addInput = document.createElement("input");
-      addInput.type = "time";
-      addInput.step = 1800;
-      const addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "seg-btn";
-      addBtn.style.flex = "0 0 auto";
-      addBtn.textContent = "追加";
-      addBtn.onclick = () => {
-        if (!addInput.value) return;
-        addAwakening(addInput.value);
-      };
-      addRow.appendChild(addInput);
-      addRow.appendChild(addBtn);
-      root.appendChild(addRow);
     }
 
     // 時刻のみ選んだ値に、この記録の起床予定日を基準に日付を補って保存する。
-    // 「夜(正午以降)の時刻ならその前日、それ以外はその日」とみなす(寝入り・中途覚醒用)。
+    // 「夜(正午以降)の時刻ならその前日、それ以外はその日」とみなす(寝入り用)。
     function combineDateAndTime(dateKeyStr, timeValue) {
       const [h, m] = timeValue.split(":").map(Number);
       const [y, mo, d] = dateKeyStr.split("-").map(Number);
@@ -1337,29 +1209,6 @@
       const [h, m] = timeValue.split(":").map(Number);
       const [y, mo, d] = dateKeyStr.split("-").map(Number);
       return new Date(y, mo - 1, d, h, m, 0, 0).toISOString();
-    }
-
-    function addAwakening(timeValue) {
-      const records = loadRecords();
-      const rec = Object.assign({}, records[detailDateKey] || {});
-      const awakenings = (rec.awakenings || []).slice();
-      awakenings.push({ at: combineDateAndTime(detailDateKey, timeValue) });
-      awakenings.sort((a, b) => new Date(a.at) - new Date(b.at));
-      rec.awakenings = awakenings;
-      records[detailDateKey] = rec;
-      saveRecords(records);
-      renderDetailScreen();
-    }
-
-    function removeAwakening(index) {
-      const records = loadRecords();
-      const rec = Object.assign({}, records[detailDateKey] || {});
-      const awakenings = (rec.awakenings || []).slice();
-      awakenings.splice(index, 1);
-      rec.awakenings = awakenings;
-      records[detailDateKey] = rec;
-      saveRecords(records);
-      renderDetailScreen();
     }
 
     function deleteDetailRecord() {
