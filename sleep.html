@@ -724,11 +724,18 @@
       return wrap;
     }
 
-    // 「外出していた時間」を指でなぞって範囲選択するタイムライン(30分単位、24時間)。
-    // 出発・帰宅を別々に選ばせるのではなく、一度のドラッグで両方決める。
-    // onChange(startStr, endStr) は範囲確定時のみ呼ぶ("HH:MM" or null,null)。
-    function makeAwayField(labelText, startValue, endValue, onChange) {
-      const SEGMENTS = 48; // 30分 x 48 = 24時間
+    // 「外出していた時間」を指でなぞって記録するタイムライン(30分単位、24時間)。
+    // 1段48マスだと目盛が細かすぎて押しにくい & 1回のドラッグでは範囲が1つしか
+    // 作れなかったため、2段組(12時間x2段、1マスの幅を2倍に)にし、
+    // なぞった部分を「そのストロークの塗り方向」で塗る(オセロ的な反転ではなく、
+    // 1本指でなぞった範囲を選択/解除のどちらかに統一)方式にする。
+    // これにより、誤って1マスだけ触れても同じ場所をもう一度タップし直せば戻せるし、
+    // 何回かに分けて別々の外出区間を記録できる。
+    // periods: [{from:"HH:MM", to:"HH:MM"}, ...]  onChange(periods)
+    function makeAwayField(labelText, periods, onChange) {
+      const SEGMENTS_PER_ROW = 24; // 12時間 ÷ 30分
+      const ROW_COUNT = 2;
+      const TOTAL = SEGMENTS_PER_ROW * ROW_COUNT;
 
       const wrap = document.createElement("div");
       wrap.className = "field";
@@ -742,21 +749,109 @@
       valueDisplay.className = "range-time-value";
       wrap.appendChild(valueDisplay);
 
-      const track = document.createElement("div");
-      track.className = "away-track";
-      const segEls = [];
-      for (let i = 0; i < SEGMENTS; i++) {
-        const seg = document.createElement("div");
-        seg.className = "away-seg";
-        track.appendChild(seg);
-        segEls.push(seg);
+      function segIndexToTime(i) {
+        const totalMin = i * 30;
+        return pad2(Math.floor(totalMin / 60)) + ":" + pad2(totalMin % 60);
       }
-      wrap.appendChild(track);
 
-      const scale = document.createElement("div");
-      scale.className = "range-time-scale";
-      scale.innerHTML = "<span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span>";
-      wrap.appendChild(scale);
+      const selected = new Array(TOTAL).fill(false);
+      (periods || []).forEach(p => {
+        const s = Math.round(hhmmToMinutes(p.from) / 30);
+        const e = Math.round(hhmmToMinutes(p.to) / 30);
+        for (let i = Math.max(0, s); i < Math.min(TOTAL, e); i++) selected[i] = true;
+      });
+
+      function computePeriods() {
+        const result = [];
+        let start = null;
+        for (let i = 0; i <= TOTAL; i++) {
+          if (i < TOTAL && selected[i]) {
+            if (start == null) start = i;
+          } else if (start != null) {
+            result.push({ from: segIndexToTime(start), to: segIndexToTime(i) });
+            start = null;
+          }
+        }
+        return result;
+      }
+
+      const segEls = new Array(TOTAL);
+
+      function renderCells() {
+        segEls.forEach((el, i) => el.classList.toggle("selected", selected[i]));
+        const p = computePeriods();
+        valueDisplay.textContent = p.length
+          ? p.map(x => x.from + " 〜 " + x.to).join(" , ")
+          : "未設定(なぞって設定)";
+      }
+
+      function buildRow(rowIndex) {
+        const track = document.createElement("div");
+        track.className = "away-track";
+
+        for (let i = 0; i < SEGMENTS_PER_ROW; i++) {
+          const seg = document.createElement("div");
+          seg.className = "away-seg";
+          track.appendChild(seg);
+          segEls[rowIndex * SEGMENTS_PER_ROW + i] = seg;
+        }
+
+        let paintValue = null; // このストロークで塗る値(true=選択/false=解除)
+        let lastIndex = null;
+
+        function indexFromClientX(clientX) {
+          const rect = track.getBoundingClientRect();
+          const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+          return Math.min(SEGMENTS_PER_ROW - 1, Math.floor(ratio * SEGMENTS_PER_ROW));
+        }
+
+        function paintRangeTo(idx) {
+          const lo = Math.min(lastIndex, idx);
+          const hi = Math.max(lastIndex, idx);
+          for (let i = lo; i <= hi; i++) {
+            selected[rowIndex * SEGMENTS_PER_ROW + i] = paintValue;
+          }
+          lastIndex = idx;
+        }
+
+        track.addEventListener("pointerdown", e => {
+          e.preventDefault();
+          track.setPointerCapture(e.pointerId);
+          const idx = indexFromClientX(e.clientX);
+          paintValue = !selected[rowIndex * SEGMENTS_PER_ROW + idx];
+          lastIndex = idx;
+          selected[rowIndex * SEGMENTS_PER_ROW + idx] = paintValue;
+          renderCells();
+        });
+
+        track.addEventListener("pointermove", e => {
+          if (paintValue == null) return;
+          const idx = indexFromClientX(e.clientX);
+          if (idx === lastIndex) return;
+          paintRangeTo(idx);
+          renderCells();
+        });
+
+        function finishStroke() {
+          if (paintValue == null) return;
+          paintValue = null;
+          lastIndex = null;
+          onChange(computePeriods());
+        }
+        track.addEventListener("pointerup", finishStroke);
+        track.addEventListener("pointercancel", finishStroke);
+
+        return track;
+      }
+
+      for (let r = 0; r < ROW_COUNT; r++) {
+        wrap.appendChild(buildRow(r));
+        const scale = document.createElement("div");
+        scale.className = "range-time-scale";
+        const startH = r * 12;
+        scale.innerHTML = "<span>" + startH + ":00</span><span>" + (startH + 6) + ":00</span><span>" + (startH + 12) + ":00</span>";
+        wrap.appendChild(scale);
+      }
 
       const clearBtn = document.createElement("button");
       clearBtn.type = "button";
@@ -764,70 +859,14 @@
       clearBtn.textContent = "×";
       clearBtn.style.marginTop = "8px";
       clearBtn.setAttribute("aria-label", "クリア");
+      clearBtn.onclick = () => {
+        selected.fill(false);
+        renderCells();
+        onChange([]);
+      };
       wrap.appendChild(clearBtn);
 
-      function segIndexToTime(i) {
-        const totalMin = i * 30;
-        return pad2(Math.floor(totalMin / 60)) + ":" + pad2(totalMin % 60);
-      }
-
-      let selStart = null;
-      let selEnd = null; // セグメント番号(両端含む)
-      if (startValue && endValue) {
-        selStart = Math.round(hhmmToMinutes(startValue) / 30);
-        selEnd = Math.max(selStart, Math.round(hhmmToMinutes(endValue) / 30) - 1);
-      }
-
-      function render() {
-        segEls.forEach((el, i) => {
-          el.classList.toggle("selected", selStart != null && i >= selStart && i <= selEnd);
-        });
-        valueDisplay.textContent = selStart != null
-          ? segIndexToTime(selStart) + " 〜 " + segIndexToTime(selEnd + 1)
-          : "未設定(なぞって設定)";
-      }
-      render();
-
-      function indexFromClientX(clientX) {
-        const rect = track.getBoundingClientRect();
-        const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-        return Math.min(SEGMENTS - 1, Math.floor(ratio * SEGMENTS));
-      }
-
-      let dragStartIndex = null;
-
-      track.addEventListener("pointerdown", e => {
-        e.preventDefault();
-        track.setPointerCapture(e.pointerId);
-        dragStartIndex = indexFromClientX(e.clientX);
-        selStart = dragStartIndex;
-        selEnd = dragStartIndex;
-        render();
-      });
-
-      track.addEventListener("pointermove", e => {
-        if (dragStartIndex == null) return;
-        const idx = indexFromClientX(e.clientX);
-        selStart = Math.min(dragStartIndex, idx);
-        selEnd = Math.max(dragStartIndex, idx);
-        render();
-      });
-
-      function finishDrag() {
-        if (dragStartIndex == null) return;
-        dragStartIndex = null;
-        onChange(segIndexToTime(selStart), segIndexToTime(selEnd + 1));
-      }
-      track.addEventListener("pointerup", finishDrag);
-      track.addEventListener("pointercancel", finishDrag);
-
-      clearBtn.onclick = () => {
-        selStart = null;
-        selEnd = null;
-        render();
-        onChange(null, null);
-      };
-
+      renderCells();
       return wrap;
     }
 
@@ -947,8 +986,8 @@
       ));
 
       root.appendChild(makeAwayField(
-        "外出していた時間(前日)", morningDraft.leave_home_at, morningDraft.return_home_at,
-        (start, end) => { morningDraft.leave_home_at = start; morningDraft.return_home_at = end; }
+        "外出していた時間(前日、複数回もOK)", morningDraft.away_periods || [],
+        periods => { morningDraft.away_periods = periods; }
       ));
     }
 
@@ -1100,8 +1139,9 @@
         ["起床時刻", rec.wake_at ? timeStr(new Date(rec.wake_at)) : "未入力"],
         ["睡眠時間", sleepDurationText(rec)],
         ["就寝場所", rec.sleep_place ? PLACE_LABELS[rec.sleep_place] : "未入力"],
-        ["外出時刻(前日)", formatTimeOrNone(rec.leave_home_at)],
-        ["帰宅時刻(前日)", formatTimeOrNone(rec.return_home_at)],
+        ["外出していた時間(前日)", (rec.away_periods && rec.away_periods.length)
+          ? rec.away_periods.map(p => p.from + "〜" + p.to).join("、")
+          : "未入力"],
         ["飲酒", rec.alcohol_level ? ALCOHOL_LABELS[rec.alcohol_level] : "未入力"],
         ["最後に飲んだ時刻", formatTimeOrNone(rec.alcohol_last_at)],
         ["カフェイン摂取", (rec.caffeine_hours && rec.caffeine_hours.length) ? rec.caffeine_hours.map(h => h + "時").join("、") : "未入力"],
