@@ -584,7 +584,7 @@
       <div class="top-title">カフェイン記録</div>
     </div>
     <div class="date-bar">
-      <span class="date-bar-label">記録日</span>
+      <span class="date-bar-label">記録対象日</span>
       <input type="date" class="date-input" id="caffeine-date-input">
       <span class="date-bar-weekday" id="caffeine-date-weekday"></span>
     </div>
@@ -1159,8 +1159,10 @@
     // ---- カフェイン(スタンプカード形式、いつでも追記できる別メニュー) ----
     let caffeineDateKey = "";
 
+    // カフェインは夜の記録と違い「飲んだ瞬間」に記録することが多いので、
+    // 寝る前の時刻を翌日扱いにする夜用のロジックは使わず、単純に今日の日付を初期値にする。
     function openCaffeineScreen() {
-      caffeineDateKey = computeNightWakeDateKey(new Date());
+      caffeineDateKey = dateKey(new Date());
 
       const dateInput = document.getElementById("caffeine-date-input");
       dateInput.value = caffeineDateKey;
@@ -1280,6 +1282,13 @@
       return ms / 3600000;
     }
 
+    // 就寝に近いほど影響が気になる項目なので、その日のカフェイン摂取のうち
+    // 最も遅い時間帯を代表値としてグラフに使う。
+    function lastCaffeineHourOf(rec) {
+      if (!rec || !rec.caffeine_hours || !rec.caffeine_hours.length) return null;
+      return Math.max(...rec.caffeine_hours);
+    }
+
     function collectChartData(days) {
       const records = loadRecords();
       const today = new Date();
@@ -1315,6 +1324,13 @@
       });
 
       renderAlcoholPanel(root, "飲酒", data);
+
+      const caffeinePoints = data.map(d => ({ date: d.date, value: lastCaffeineHourOf(d.rec) }));
+      renderBarPanel(root, "カフェイン最終摂取時刻", caffeinePoints, {
+        color: "#b98a4e",
+        maxValue: 24,
+        formatValue: v => v + "時"
+      });
     }
 
     // SVGは横幅を100%(preserveAspectRatio="none")で伸縮させるため、
