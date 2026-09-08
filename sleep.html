@@ -383,6 +383,29 @@
       margin-top: 40px;
     }
 
+    /* 操作結果を伝える一時的な通知 */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 32px;
+      transform: translateX(-50%) translateY(10px);
+      background: #444;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      white-space: nowrap;
+      z-index: 10;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
     /* グラフ画面 */
     .chart-panel {
       margin-bottom: 30px;
@@ -627,6 +650,8 @@
     <button class="delete-btn" onclick="deleteDetailRecord()">この記録を削除</button>
   </div>
 
+  <div class="toast" id="toast"></div>
+
   <script>
     const STORAGE_KEY = "sleepLogRecords_v1";
 
@@ -663,6 +688,15 @@
     function weekdayOf(dateKeyStr) {
       const [y, mo, d] = dateKeyStr.split("-").map(Number);
       return WEEKDAYS[new Date(y, mo - 1, d).getDay()];
+    }
+
+    // 保存できたことが分かるよう、短時間だけ結果を表示する通知。
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(showToast._timer);
+      showToast._timer = setTimeout(() => toast.classList.remove("show"), 1800);
     }
 
     // 就寝時は日付をまたぐため、正午以降にタップした場合は
@@ -1178,14 +1212,25 @@
       showScreen("screen-caffeine");
     }
 
+    // カフェインは就寝前の要因として、その時刻が属する「起床予定日」の
+    // レコードに保存する(寝入り・飲酒と同じ考え方: 正午以降は翌日扱い)。
+    // そのため記録対象日の1日の中でも、午前の時間帯と午後の時間帯とで
+    // 実際に保存されるレコードの日付が変わる。
+    function caffeineStorageKeyFor(targetDateKeyStr, hour) {
+      const [y, mo, d] = targetDateKeyStr.split("-").map(Number);
+      const dt = new Date(y, mo - 1, d);
+      if (hour >= 12) dt.setDate(dt.getDate() + 1);
+      return dateKey(dt);
+    }
+
     function renderCaffeineGrid() {
       const records = loadRecords();
-      const rec = records[caffeineDateKey] || {};
-      const hours = rec.caffeine_hours || [];
 
       const grid = document.getElementById("caffeine-grid");
       grid.innerHTML = "";
       for (let h = 0; h < 24; h++) {
+        const storageKey = caffeineStorageKeyFor(caffeineDateKey, h);
+        const hours = (records[storageKey] || {}).caffeine_hours || [];
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "stamp-btn" + (hours.includes(h) ? " selected" : "");
@@ -1196,17 +1241,19 @@
     }
 
     function toggleCaffeineHour(h) {
+      const storageKey = caffeineStorageKeyFor(caffeineDateKey, h);
       const records = loadRecords();
-      const rec = Object.assign({}, records[caffeineDateKey] || {});
+      const rec = Object.assign({}, records[storageKey] || {});
       const hours = (rec.caffeine_hours || []).slice();
       const idx = hours.indexOf(h);
-      if (idx >= 0) hours.splice(idx, 1);
-      else hours.push(h);
+      const added = idx < 0;
+      if (added) hours.push(h); else hours.splice(idx, 1);
       hours.sort((a, b) => a - b);
       rec.caffeine_hours = hours;
-      records[caffeineDateKey] = rec;
+      records[storageKey] = rec;
       saveRecords(records);
       renderCaffeineGrid();
+      showToast(h + "時を" + (added ? "保存しました" : "取り消しました"));
     }
 
     // ---- 一覧・詳細 ----
