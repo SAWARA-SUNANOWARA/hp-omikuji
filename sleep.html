@@ -383,6 +383,79 @@
       margin-top: 40px;
     }
 
+    /* グラフ画面 */
+    .chart-panel {
+      margin-bottom: 30px;
+    }
+
+    .chart-panel-title {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .chart-svg-wrap {
+      position: relative;
+    }
+
+    .chart-svg-wrap svg {
+      display: block;
+      width: 100%;
+      height: 90px;
+    }
+
+    .chart-tooltip {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      background: #333;
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 5px 9px;
+      border-radius: 6px;
+      white-space: nowrap;
+      pointer-events: none;
+      display: none;
+      z-index: 5;
+    }
+
+    .chart-axis-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: #aaa;
+      margin-top: 4px;
+    }
+
+    .chart-empty {
+      text-align: center;
+      color: #bbb;
+      font-size: 0.8rem;
+      padding: 24px 0;
+    }
+
+    .chart-legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 0.72rem;
+      color: #666;
+      margin-top: 8px;
+    }
+
+    .chart-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .chart-legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
     /* 詳細画面 */
     .detail-row {
       display: flex;
@@ -456,6 +529,14 @@
         <div class="sub" style="color:#999;">これまでの記録を見る</div>
       </span>
     </button>
+
+    <button class="home-btn" style="background:#fff;" onclick="openChartScreen()">
+      <span class="icon">📈</span>
+      <span>
+        <div class="label" style="color:#444;">グラフを見る</div>
+        <div class="sub" style="color:#999;">傾向を振り返る</div>
+      </span>
+    </button>
   </div>
 
   <!-- 夜の記録画面 -->
@@ -502,9 +583,29 @@
       <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
       <div class="top-title">カフェイン記録</div>
     </div>
-    <div class="date-label" id="caffeine-date-label"></div>
+    <div class="date-bar">
+      <span class="date-bar-label">記録日</span>
+      <input type="date" class="date-input" id="caffeine-date-input">
+      <span class="date-bar-weekday" id="caffeine-date-weekday"></span>
+    </div>
     <div class="field-label">飲んだ時間帯をタップ(何回でもOK、押すたびに保存)</div>
     <div class="stamp-grid" id="caffeine-grid"></div>
+  </div>
+
+  <!-- グラフ画面 -->
+  <div class="screen" id="screen-chart">
+    <div class="top-bar">
+      <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
+      <div class="top-title">記録の傾向</div>
+    </div>
+
+    <div class="seg-group" id="chart-range-group" style="margin-bottom: 24px;">
+      <button class="seg-btn" type="button" data-range="7">1週間</button>
+      <button class="seg-btn" type="button" data-range="30">1ヶ月</button>
+      <button class="seg-btn" type="button" data-range="90">3ヶ月</button>
+    </div>
+
+    <div id="chart-panels"></div>
   </div>
 
   <!-- 一覧画面 -->
@@ -1060,7 +1161,17 @@
 
     function openCaffeineScreen() {
       caffeineDateKey = computeNightWakeDateKey(new Date());
-      document.getElementById("caffeine-date-label").textContent = "記録日: " + caffeineDateKey;
+
+      const dateInput = document.getElementById("caffeine-date-input");
+      dateInput.value = caffeineDateKey;
+      document.getElementById("caffeine-date-weekday").textContent = "(" + weekdayOf(caffeineDateKey) + ")";
+      dateInput.onchange = () => {
+        if (!dateInput.value) { dateInput.value = caffeineDateKey; return; }
+        caffeineDateKey = dateInput.value;
+        document.getElementById("caffeine-date-weekday").textContent = "(" + weekdayOf(caffeineDateKey) + ")";
+        renderCaffeineGrid();
+      };
+
       renderCaffeineGrid();
       showScreen("screen-caffeine");
     }
@@ -1140,6 +1251,312 @@
       });
 
       showScreen("screen-list");
+    }
+
+    // ---- グラフ(1週間/1ヶ月/3ヶ月で切り替え) ----
+    const ALCOHOL_CHART_COLORS = { none: "#c3c2b7", tipsy: "#fab219", drunk: "#ec835a", wasted: "#d03b3b" };
+
+    let chartRangeDays = 7;
+
+    function openChartScreen() {
+      document.querySelectorAll("#chart-range-group .seg-btn").forEach(btn => {
+        btn.classList.toggle("selected", Number(btn.dataset.range) === chartRangeDays);
+        btn.onclick = () => {
+          chartRangeDays = Number(btn.dataset.range);
+          document.querySelectorAll("#chart-range-group .seg-btn").forEach(b =>
+            b.classList.toggle("selected", b === btn)
+          );
+          renderChartPanels();
+        };
+      });
+      renderChartPanels();
+      showScreen("screen-chart");
+    }
+
+    function sleepHoursOf(rec) {
+      if (!rec || !rec.bedtime || !rec.wake_at) return null;
+      const ms = new Date(rec.wake_at) - new Date(rec.bedtime);
+      if (ms <= 0) return null;
+      return ms / 3600000;
+    }
+
+    function collectChartData(days) {
+      const records = loadRecords();
+      const today = new Date();
+      const data = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = dateKey(d);
+        data.push({ date: key, rec: records[key] || null });
+      }
+      return data;
+    }
+
+    function renderChartPanels() {
+      const root = document.getElementById("chart-panels");
+      root.innerHTML = "";
+      const data = collectChartData(chartRangeDays);
+
+      const durationPoints = data.map(d => ({ date: d.date, value: sleepHoursOf(d.rec) }));
+      const maxDuration = Math.max(10, Math.ceil(Math.max(0, ...durationPoints.map(p => p.value || 0))));
+      renderBarPanel(root, "睡眠時間", durationPoints, {
+        color: "#6c7ae0",
+        maxValue: maxDuration,
+        formatValue: v => v.toFixed(1) + "時間"
+      });
+
+      const refreshedPoints = data.map(d => ({ date: d.date, value: d.rec ? d.rec.refreshed || null : null }));
+      renderLinePanel(root, "すっきり度", refreshedPoints, {
+        color: "#eb6834",
+        minValue: 1,
+        maxValue: 5,
+        formatValue: v => v + " / 5"
+      });
+
+      renderAlcoholPanel(root, "飲酒", data);
+    }
+
+    // SVGは横幅を100%(preserveAspectRatio="none")で伸縮させるため、
+    // 縦方向のみ意味を持つ図形(バー・ライン)は問題ないが、円は横に潰れて
+    // 楕円になってしまう。そのため点の目印には円ではなく角丸の短い矩形を使う。
+    function makeChartSvg(n, unit, height) {
+      const svgNS = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("viewBox", "0 0 " + (n * unit) + " " + height);
+      svg.setAttribute("preserveAspectRatio", "none");
+      return svg;
+    }
+
+    function showChartTooltip(evtTarget, tooltip, wrap, dateStr, valueText) {
+      const wrapRect = wrap.getBoundingClientRect();
+      const targetRect = evtTarget.getBoundingClientRect();
+      tooltip.style.left = (targetRect.left + targetRect.width / 2 - wrapRect.left) + "px";
+      tooltip.style.top = (targetRect.top - wrapRect.top) + "px";
+      const [, m, d] = dateStr.split("-").map(Number);
+      tooltip.textContent = m + "/" + d + ": " + valueText;
+      tooltip.style.display = "block";
+      clearTimeout(tooltip._hideTimer);
+      tooltip._hideTimer = setTimeout(() => { tooltip.style.display = "none"; }, 2500);
+    }
+
+    function makeChartAxisLabels(data) {
+      const row = document.createElement("div");
+      row.className = "chart-axis-labels";
+      const n = data.length;
+      const count = Math.min(n, 5);
+      for (let i = 0; i < count; i++) {
+        const idx = count === 1 ? 0 : Math.round((i * (n - 1)) / (count - 1));
+        const [, m, d] = data[idx].date.split("-").map(Number);
+        const span = document.createElement("span");
+        span.textContent = m + "/" + d;
+        row.appendChild(span);
+      }
+      return row;
+    }
+
+    function renderBarPanel(container, title, points, opts) {
+      const wrap = document.createElement("div");
+      wrap.className = "chart-panel";
+      const titleEl = document.createElement("div");
+      titleEl.className = "chart-panel-title";
+      titleEl.textContent = title;
+      wrap.appendChild(titleEl);
+
+      if (!points.some(p => p.value != null)) {
+        const empty = document.createElement("div");
+        empty.className = "chart-empty";
+        empty.textContent = "まだ記録がありません";
+        wrap.appendChild(empty);
+        container.appendChild(wrap);
+        return;
+      }
+
+      const unit = 10, height = 90, bottom = 74, top = 10;
+      const plotH = bottom - top;
+      const svgWrap = document.createElement("div");
+      svgWrap.className = "chart-svg-wrap";
+      const svg = makeChartSvg(points.length, unit, height);
+
+      const svgNS = "http://www.w3.org/2000/svg";
+      const baseline = document.createElementNS(svgNS, "line");
+      baseline.setAttribute("x1", 0);
+      baseline.setAttribute("x2", points.length * unit);
+      baseline.setAttribute("y1", bottom);
+      baseline.setAttribute("y2", bottom);
+      baseline.setAttribute("stroke", "#c3c2b7");
+      baseline.setAttribute("stroke-width", 0.6);
+      svg.appendChild(baseline);
+
+      const tooltip = document.createElement("div");
+      tooltip.className = "chart-tooltip";
+
+      points.forEach((p, i) => {
+        if (p.value == null) return;
+        const barW = unit * 0.7;
+        const x = i * unit + (unit - barW) / 2;
+        const h = Math.max((p.value / opts.maxValue) * plotH, 1.5);
+        const y = bottom - h;
+        const rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", x);
+        rect.setAttribute("y", y);
+        rect.setAttribute("width", barW);
+        rect.setAttribute("height", h);
+        rect.setAttribute("rx", 1.5);
+        rect.setAttribute("fill", opts.color);
+        rect.style.cursor = "pointer";
+        rect.addEventListener("click", e => showChartTooltip(e.target, tooltip, svgWrap, p.date, opts.formatValue(p.value)));
+        svg.appendChild(rect);
+      });
+
+      svgWrap.appendChild(svg);
+      svgWrap.appendChild(tooltip);
+      wrap.appendChild(svgWrap);
+      wrap.appendChild(makeChartAxisLabels(points));
+      container.appendChild(wrap);
+    }
+
+    function renderLinePanel(container, title, points, opts) {
+      const wrap = document.createElement("div");
+      wrap.className = "chart-panel";
+      const titleEl = document.createElement("div");
+      titleEl.className = "chart-panel-title";
+      titleEl.textContent = title;
+      wrap.appendChild(titleEl);
+
+      if (!points.some(p => p.value != null)) {
+        const empty = document.createElement("div");
+        empty.className = "chart-empty";
+        empty.textContent = "まだ記録がありません";
+        wrap.appendChild(empty);
+        container.appendChild(wrap);
+        return;
+      }
+
+      const unit = 10, height = 90, bottom = 74, top = 10;
+      const plotH = bottom - top;
+      const svgWrap = document.createElement("div");
+      svgWrap.className = "chart-svg-wrap";
+      const svg = makeChartSvg(points.length, unit, height);
+      const svgNS = "http://www.w3.org/2000/svg";
+
+      const baseline = document.createElementNS(svgNS, "line");
+      baseline.setAttribute("x1", 0);
+      baseline.setAttribute("x2", points.length * unit);
+      baseline.setAttribute("y1", bottom);
+      baseline.setAttribute("y2", bottom);
+      baseline.setAttribute("stroke", "#c3c2b7");
+      baseline.setAttribute("stroke-width", 0.6);
+      svg.appendChild(baseline);
+
+      function yOf(v) {
+        return bottom - ((v - opts.minValue) / (opts.maxValue - opts.minValue)) * plotH;
+      }
+
+      const coords = points.map((p, i) => p.value == null ? null : [i * unit + unit / 2, yOf(p.value)]);
+
+      let pathD = "";
+      coords.forEach(c => {
+        if (!c) { pathD += ""; return; }
+        pathD += (pathD ? " L " : "M ") + c[0] + " " + c[1];
+      });
+      if (pathD) {
+        const path = document.createElementNS(svgNS, "path");
+        path.setAttribute("d", pathD);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", opts.color);
+        path.setAttribute("stroke-width", 1.2);
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("stroke-linejoin", "round");
+        svg.appendChild(path);
+      }
+
+      const tooltip = document.createElement("div");
+      tooltip.className = "chart-tooltip";
+
+      points.forEach((p, i) => {
+        if (p.value == null) return;
+        const [cx, cy] = coords[i];
+        const markW = unit * 0.5;
+        const rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", cx - markW / 2);
+        rect.setAttribute("y", cy - markW / 2);
+        rect.setAttribute("width", markW);
+        rect.setAttribute("height", markW);
+        rect.setAttribute("rx", 1.2);
+        rect.setAttribute("fill", opts.color);
+        rect.style.cursor = "pointer";
+        rect.addEventListener("click", e => showChartTooltip(e.target, tooltip, svgWrap, p.date, opts.formatValue(p.value)));
+        svg.appendChild(rect);
+      });
+
+      svgWrap.appendChild(svg);
+      svgWrap.appendChild(tooltip);
+      wrap.appendChild(svgWrap);
+      wrap.appendChild(makeChartAxisLabels(points));
+      container.appendChild(wrap);
+    }
+
+    function renderAlcoholPanel(container, title, data) {
+      const wrap = document.createElement("div");
+      wrap.className = "chart-panel";
+      const titleEl = document.createElement("div");
+      titleEl.className = "chart-panel-title";
+      titleEl.textContent = title;
+      wrap.appendChild(titleEl);
+
+      if (!data.some(d => d.rec && d.rec.alcohol_level)) {
+        const empty = document.createElement("div");
+        empty.className = "chart-empty";
+        empty.textContent = "まだ記録がありません";
+        wrap.appendChild(empty);
+        container.appendChild(wrap);
+        return;
+      }
+
+      const unit = 10, height = 26;
+      const svgWrap = document.createElement("div");
+      svgWrap.className = "chart-svg-wrap";
+      const svg = makeChartSvg(data.length, unit, height);
+      svg.style.height = "26px";
+      const svgNS = "http://www.w3.org/2000/svg";
+
+      const tooltip = document.createElement("div");
+      tooltip.className = "chart-tooltip";
+
+      data.forEach((d, i) => {
+        const level = d.rec ? d.rec.alcohol_level : null;
+        if (!level) return;
+        const barW = unit * 0.7;
+        const x = i * unit + (unit - barW) / 2;
+        const rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", x);
+        rect.setAttribute("y", 6);
+        rect.setAttribute("width", barW);
+        rect.setAttribute("height", 14);
+        rect.setAttribute("rx", 1.5);
+        rect.setAttribute("fill", ALCOHOL_CHART_COLORS[level]);
+        rect.style.cursor = "pointer";
+        rect.addEventListener("click", e => showChartTooltip(e.target, tooltip, svgWrap, d.date, ALCOHOL_LABELS[level]));
+        svg.appendChild(rect);
+      });
+
+      svgWrap.appendChild(svg);
+      svgWrap.appendChild(tooltip);
+      wrap.appendChild(svgWrap);
+      wrap.appendChild(makeChartAxisLabels(data));
+
+      const legend = document.createElement("div");
+      legend.className = "chart-legend";
+      Object.keys(ALCOHOL_LABELS).forEach(key => {
+        const item = document.createElement("span");
+        item.className = "chart-legend-item";
+        item.innerHTML = '<span class="chart-legend-dot" style="background:' + ALCOHOL_CHART_COLORS[key] + '"></span>' + ALCOHOL_LABELS[key];
+        legend.appendChild(item);
+      });
+      wrap.appendChild(legend);
+
+      container.appendChild(wrap);
     }
 
     function formatTimeOrNone(v) {
