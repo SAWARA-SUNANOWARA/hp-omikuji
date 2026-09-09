@@ -431,8 +431,37 @@
       margin-bottom: 8px;
     }
 
+    .chart-plot-row {
+      display: flex;
+      align-items: stretch;
+    }
+
+    .chart-y-axis {
+      position: relative;
+      width: 30px;
+      flex: 0 0 auto;
+    }
+
+    .chart-y-axis span {
+      position: absolute;
+      left: 0;
+      transform: translateY(-50%);
+      font-size: 0.62rem;
+      color: #aaa;
+      white-space: nowrap;
+    }
+
     .chart-svg-wrap {
       position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .chart-summary-stat {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #6c7ae0;
+      margin-bottom: 10px;
     }
 
     .chart-svg-wrap svg {
@@ -1486,7 +1515,8 @@
       renderBarPanel(root, "睡眠時間", durationPoints, {
         color: "#6c7ae0",
         maxValue: maxDuration,
-        formatValue: v => v.toFixed(1) + "時間"
+        formatValue: v => v.toFixed(1) + "時間",
+        axisFormat: v => Math.round(v) + "h"
       });
 
       const refreshedPoints = data.map(d => ({ date: d.date, value: d.rec ? d.rec.refreshed || null : null }));
@@ -1494,7 +1524,8 @@
         color: "#eb6834",
         minValue: 1,
         maxValue: 5,
-        formatValue: v => v + " / 5"
+        formatValue: v => v + " / 5",
+        axisFormat: v => String(Math.round(v))
       });
 
       renderCategoryPanel(root, "飲酒", data, {
@@ -1507,14 +1538,16 @@
       renderBarPanel(root, "最後に飲んだ時刻", alcoholLastAtPoints, {
         color: "#e87ba4",
         maxValue: 8,
-        formatValue: v => formatOffsetAsClock(v, 20)
+        formatValue: v => formatOffsetAsClock(v, 20),
+        axisFormat: v => Math.round((20 + v) % 24) + "時"
       });
 
       const caffeinePoints = data.map(d => ({ date: d.date, value: lastCaffeineHourOf(d.rec) }));
       renderBarPanel(root, "カフェイン最終摂取時刻", caffeinePoints, {
         color: "#b98a4e",
         maxValue: 24,
-        formatValue: v => v + "時"
+        formatValue: v => v + "時",
+        axisFormat: v => Math.round(v) + "時"
       });
 
       const awakePoints = data.map(d => ({ date: d.date, value: awakeMinutesOf(d.rec) }));
@@ -1522,13 +1555,21 @@
       renderBarPanel(root, "中途覚醒(合計時間)", awakePoints, {
         color: "#eda100",
         maxValue: maxAwake,
-        formatValue: v => v >= 60 ? Math.floor(v / 60) + "時間" + (v % 60) + "分" : v + "分"
+        formatValue: v => v >= 60 ? Math.floor(v / 60) + "時間" + (v % 60) + "分" : v + "分",
+        axisFormat: v => Math.round(v) + "分"
       });
 
       renderCategoryPanel(root, "就寝場所", data, {
         getKey: rec => rec.sleep_place,
         colors: PLACE_CHART_COLORS,
-        labels: PLACE_LABELS
+        labels: PLACE_LABELS,
+        summary: data => {
+          const recorded = data.filter(d => d.rec && d.rec.sleep_place);
+          if (!recorded.length) return null;
+          const home = recorded.filter(d => d.rec.sleep_place === "home").length;
+          const pct = Math.round((home / recorded.length) * 100);
+          return "自宅率 " + pct + "% (" + home + "/" + recorded.length + "日)";
+        }
       });
     }
 
@@ -1541,6 +1582,42 @@
       svg.setAttribute("viewBox", "0 0 " + (n * unit) + " " + height);
       svg.setAttribute("preserveAspectRatio", "none");
       return svg;
+    }
+
+    // 縦軸の目盛(上端・中央・下端の3点)を、グリッド線(SVG内)と数値ラベル(HTML)で表示する。
+    // ラベルはSVGの外(左側)に置くことで、横幅だけ伸縮するSVG内で文字が
+    // 歪む問題を避ける。戻り値は [yAxis列, svgWrap] をまとめた行要素。
+    function addYAxisGrid(svg, svgNS, svgWrap, opts) {
+      const width = opts.width;
+      const plotH = opts.bottom - opts.top;
+      const ticks = [opts.maxValue, (opts.maxValue + opts.minValue) / 2, opts.minValue];
+
+      const yAxis = document.createElement("div");
+      yAxis.className = "chart-y-axis";
+
+      ticks.forEach(v => {
+        const y = opts.bottom - ((v - opts.minValue) / (opts.maxValue - opts.minValue)) * plotH;
+
+        const grid = document.createElementNS(svgNS, "line");
+        grid.setAttribute("x1", 0);
+        grid.setAttribute("x2", width);
+        grid.setAttribute("y1", y);
+        grid.setAttribute("y2", y);
+        grid.setAttribute("stroke", "#e1e0d9");
+        grid.setAttribute("stroke-width", 0.6);
+        svg.insertBefore(grid, svg.firstChild);
+
+        const label = document.createElement("span");
+        label.style.top = y + "px";
+        label.textContent = opts.axisFormat(v);
+        yAxis.appendChild(label);
+      });
+
+      const plotRow = document.createElement("div");
+      plotRow.className = "chart-plot-row";
+      plotRow.appendChild(yAxis);
+      plotRow.appendChild(svgWrap);
+      return plotRow;
     }
 
     function showChartTooltip(evtTarget, tooltip, wrap, dateStr, valueText) {
@@ -1592,16 +1669,7 @@
       const svgWrap = document.createElement("div");
       svgWrap.className = "chart-svg-wrap";
       const svg = makeChartSvg(points.length, unit, height);
-
       const svgNS = "http://www.w3.org/2000/svg";
-      const baseline = document.createElementNS(svgNS, "line");
-      baseline.setAttribute("x1", 0);
-      baseline.setAttribute("x2", points.length * unit);
-      baseline.setAttribute("y1", bottom);
-      baseline.setAttribute("y2", bottom);
-      baseline.setAttribute("stroke", "#c3c2b7");
-      baseline.setAttribute("stroke-width", 0.6);
-      svg.appendChild(baseline);
 
       const tooltip = document.createElement("div");
       tooltip.className = "chart-tooltip";
@@ -1626,7 +1694,11 @@
 
       svgWrap.appendChild(svg);
       svgWrap.appendChild(tooltip);
-      wrap.appendChild(svgWrap);
+      wrap.appendChild(addYAxisGrid(svg, svgNS, svgWrap, {
+        top, bottom, minValue: opts.minValue || 0, maxValue: opts.maxValue,
+        width: points.length * unit,
+        axisFormat: opts.axisFormat || (v => String(Math.round(v)))
+      }));
       wrap.appendChild(makeChartAxisLabels(points));
       container.appendChild(wrap);
     }
@@ -1654,15 +1726,6 @@
       svgWrap.className = "chart-svg-wrap";
       const svg = makeChartSvg(points.length, unit, height);
       const svgNS = "http://www.w3.org/2000/svg";
-
-      const baseline = document.createElementNS(svgNS, "line");
-      baseline.setAttribute("x1", 0);
-      baseline.setAttribute("x2", points.length * unit);
-      baseline.setAttribute("y1", bottom);
-      baseline.setAttribute("y2", bottom);
-      baseline.setAttribute("stroke", "#c3c2b7");
-      baseline.setAttribute("stroke-width", 0.6);
-      svg.appendChild(baseline);
 
       function yOf(v) {
         return bottom - ((v - opts.minValue) / (opts.maxValue - opts.minValue)) * plotH;
@@ -1707,13 +1770,18 @@
 
       svgWrap.appendChild(svg);
       svgWrap.appendChild(tooltip);
-      wrap.appendChild(svgWrap);
+      wrap.appendChild(addYAxisGrid(svg, svgNS, svgWrap, {
+        top, bottom, minValue: opts.minValue, maxValue: opts.maxValue,
+        width: points.length * unit,
+        axisFormat: opts.axisFormat || (v => String(Math.round(v)))
+      }));
       wrap.appendChild(makeChartAxisLabels(points));
       container.appendChild(wrap);
     }
 
     // 日ごとに1つのカテゴリ値(飲酒レベル・就寝場所など)を色分けした帯で示す汎用パネル。
-    // opts: { getKey: rec => キー or null, colors: {キー:色}, labels: {キー:表示名} }
+    // opts: { getKey: rec => キー or null, colors: {キー:色}, labels: {キー:表示名},
+    //         summary?: data => 集計テキスト or null(タイトル直下に強調表示) }
     function renderCategoryPanel(container, title, data, opts) {
       const wrap = document.createElement("div");
       wrap.className = "chart-panel";
@@ -1721,6 +1789,16 @@
       titleEl.className = "chart-panel-title";
       titleEl.textContent = title;
       wrap.appendChild(titleEl);
+
+      if (opts.summary) {
+        const summaryText = opts.summary(data);
+        if (summaryText) {
+          const summaryEl = document.createElement("div");
+          summaryEl.className = "chart-summary-stat";
+          summaryEl.textContent = summaryText;
+          wrap.appendChild(summaryEl);
+        }
+      }
 
       if (!data.some(d => d.rec && opts.getKey(d.rec))) {
         const empty = document.createElement("div");
@@ -1830,15 +1908,6 @@
       svg.style.height = height + "px";
       const svgNS = "http://www.w3.org/2000/svg";
 
-      const baseline = document.createElementNS(svgNS, "line");
-      baseline.setAttribute("x1", 0);
-      baseline.setAttribute("x2", data.length * unit);
-      baseline.setAttribute("y1", bottom);
-      baseline.setAttribute("y2", bottom);
-      baseline.setAttribute("stroke", "#c3c2b7");
-      baseline.setAttribute("stroke-width", 0.6);
-      svg.appendChild(baseline);
-
       const tooltip = document.createElement("div");
       tooltip.className = "chart-tooltip";
 
@@ -1876,7 +1945,11 @@
 
       svgWrap.appendChild(svg);
       svgWrap.appendChild(tooltip);
-      wrap.appendChild(svgWrap);
+      wrap.appendChild(addYAxisGrid(svg, svgNS, svgWrap, {
+        top, bottom, minValue: 0, maxValue: 24,
+        width: data.length * unit,
+        axisFormat: v => Math.round(v) + "h"
+      }));
       wrap.appendChild(makeChartAxisLabels(data));
 
       const legend = document.createElement("div");
