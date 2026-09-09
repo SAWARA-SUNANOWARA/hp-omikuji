@@ -383,6 +383,20 @@
       margin-top: 40px;
     }
 
+    /* バックアップ画面 */
+    .backup-textarea {
+      width: 100%;
+      height: 110px;
+      font-size: 0.7rem;
+      font-family: monospace;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #d6d9ef;
+      background: #fff;
+      color: #333;
+      resize: vertical;
+    }
+
     /* 操作結果を伝える一時的な通知 */
     .toast {
       position: fixed;
@@ -560,6 +574,30 @@
         <div class="sub" style="color:#999;">傾向を振り返る</div>
       </span>
     </button>
+
+    <button class="home-btn" style="background:#fff;" onclick="openBackupScreen()">
+      <span class="icon">💾</span>
+      <span>
+        <div class="label" style="color:#444;">データのバックアップ・引っ越し</div>
+        <div class="sub" style="color:#999;">別のURL/端末にコピーする</div>
+      </span>
+    </button>
+  </div>
+
+  <!-- バックアップ画面 -->
+  <div class="screen" id="screen-backup">
+    <div class="top-bar">
+      <button class="back-btn" onclick="showScreen('screen-home')">‹</button>
+      <div class="top-title">データのバックアップ・引っ越し</div>
+    </div>
+
+    <div class="field-label">① 下のデータをコピーする</div>
+    <textarea id="backup-export-text" class="backup-textarea" readonly></textarea>
+    <button class="seg-btn" style="width:100%; margin-top:8px;" onclick="copyBackupText()">コピーする</button>
+
+    <div class="field-label" style="margin-top:32px;">② 別のURL/端末でこの画面を開き、貼り付けて読み込む</div>
+    <textarea id="backup-import-text" class="backup-textarea" placeholder="コピーしたデータをここに貼り付けてください"></textarea>
+    <button class="seg-btn" style="width:100%; margin-top:8px; background:#6c7ae0; color:#fff; border-color:#6c7ae0;" onclick="importBackupText()">読み込む</button>
   </div>
 
   <!-- 夜の記録画面 -->
@@ -1254,6 +1292,45 @@
       saveRecords(records);
       renderCaffeineGrid();
       showToast(h + "時を" + (added ? "保存しました" : "取り消しました"));
+    }
+
+    // ---- バックアップ・引っ越し(ローカル保存のデータをテキストで書き出し/読み込み) ----
+    function openBackupScreen() {
+      document.getElementById("backup-export-text").value = localStorage.getItem(STORAGE_KEY) || "{}";
+      document.getElementById("backup-import-text").value = "";
+      showScreen("screen-backup");
+    }
+
+    function copyBackupText() {
+      const textarea = document.getElementById("backup-export-text");
+      textarea.select();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textarea.value).then(
+          () => showToast("コピーしました"),
+          () => showToast("コピーできませんでした。手動で選択してコピーしてください")
+        );
+      } else {
+        showToast("手動で選択してコピーしてください");
+      }
+    }
+
+    // 貼り付けたデータは、既にこの端末にある記録を消さないよう
+    // 日付ごとに上書き(マージ)する。同じ日付があれば貼り付け側を優先する。
+    function importBackupText() {
+      const text = document.getElementById("backup-import-text").value.trim();
+      if (!text) return;
+      let incoming;
+      try {
+        incoming = JSON.parse(text);
+      } catch (e) {
+        alert("読み込めませんでした。コピーしたデータをそのまま貼り付けてください。");
+        return;
+      }
+      const current = loadRecords();
+      const merged = Object.assign({}, current, incoming);
+      saveRecords(merged);
+      document.getElementById("backup-export-text").value = localStorage.getItem(STORAGE_KEY) || "{}";
+      showToast("読み込みました(" + Object.keys(incoming).length + "日分)");
     }
 
     // ---- 一覧・詳細 ----
