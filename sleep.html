@@ -463,6 +463,18 @@
       margin-top: 4px;
     }
 
+    .chart-percent-labels {
+      display: flex;
+      margin-bottom: 2px;
+    }
+
+    .chart-percent-labels span {
+      flex: 1;
+      text-align: center;
+      font-size: 0.65rem;
+      color: #666;
+    }
+
     .chart-empty {
       text-align: center;
       color: #bbb;
@@ -1413,6 +1425,40 @@
       return Math.max(...rec.caffeine_hours);
     }
 
+    // {from,to}の区間の長さ(分)。toが日付をまたいで「00:00」表記になる
+    // ケース(例: 23:30〜24:00がto:"00:00"として保存される)にも対応する。
+    function periodMinutes(p) {
+      const from = hhmmToMinutes(p.from);
+      let to = hhmmToMinutes(p.to);
+      if (to <= from) to += 1440;
+      return to - from;
+    }
+
+    function awayHoursOf(rec) {
+      if (!rec || !rec.away_periods || !rec.away_periods.length) return 0;
+      return rec.away_periods.reduce((sum, p) => sum + periodMinutes(p), 0) / 60;
+    }
+
+    function awakeMinutesOf(rec) {
+      if (!rec || !rec.awake_periods || !rec.awake_periods.length) return null;
+      return rec.awake_periods.reduce((sum, p) => sum + periodMinutes(p), 0);
+    }
+
+    // 最後に飲んだ時刻(20:00〜翌4:00の範囲)を、グラフの縦軸用に
+    // 「20:00からの経過時間(0〜8)」に変換する。表示テキストは実時刻に戻す。
+    function alcoholLastAtOffsetHours(rec) {
+      if (!rec || !rec.alcohol_level || rec.alcohol_level === "none" || !rec.alcohol_last_at) return null;
+      const minutes = hhmmToMinutes(rec.alcohol_last_at);
+      let offset = minutes / 60 - 20;
+      if (offset < 0) offset += 24;
+      return offset;
+    }
+
+    function formatOffsetAsClock(offsetHours, baseHour) {
+      const totalMin = Math.round((baseHour * 60 + offsetHours * 60) % 1440);
+      return pad2(Math.floor(totalMin / 60)) + ":" + pad2(totalMin % 60);
+    }
+
     function collectChartData(days) {
       const records = loadRecords();
       const today = new Date();
@@ -1431,6 +1477,10 @@
       root.innerHTML = "";
       const data = collectChartData(chartRangeDays);
 
+      // 稼働割合(睡眠+外出+自由の積み上げ、24時間で満タン)。目的に直結する
+      // メイン指標なので一番上に置く。
+      renderStackedDayPanel(root, "稼働割合(睡眠・外出・自由時間)", data);
+
       const durationPoints = data.map(d => ({ date: d.date, value: sleepHoursOf(d.rec) }));
       const maxDuration = Math.max(10, Math.ceil(Math.max(0, ...durationPoints.map(p => p.value || 0))));
       renderBarPanel(root, "睡眠時間", durationPoints, {
@@ -1447,13 +1497,38 @@
         formatValue: v => v + " / 5"
       });
 
-      renderAlcoholPanel(root, "飲酒", data);
+      renderCategoryPanel(root, "飲酒", data, {
+        getKey: rec => rec.alcohol_level,
+        colors: ALCOHOL_CHART_COLORS,
+        labels: ALCOHOL_LABELS
+      });
+
+      const alcoholLastAtPoints = data.map(d => ({ date: d.date, value: alcoholLastAtOffsetHours(d.rec) }));
+      renderBarPanel(root, "最後に飲んだ時刻", alcoholLastAtPoints, {
+        color: "#e87ba4",
+        maxValue: 8,
+        formatValue: v => formatOffsetAsClock(v, 20)
+      });
 
       const caffeinePoints = data.map(d => ({ date: d.date, value: lastCaffeineHourOf(d.rec) }));
       renderBarPanel(root, "カフェイン最終摂取時刻", caffeinePoints, {
         color: "#b98a4e",
         maxValue: 24,
         formatValue: v => v + "時"
+      });
+
+      const awakePoints = data.map(d => ({ date: d.date, value: awakeMinutesOf(d.rec) }));
+      const maxAwake = Math.max(60, Math.ceil(Math.max(0, ...awakePoints.map(p => p.value || 0)) / 10) * 10);
+      renderBarPanel(root, "中途覚醒(合計時間)", awakePoints, {
+        color: "#eda100",
+        maxValue: maxAwake,
+        formatValue: v => v >= 60 ? Math.floor(v / 60) + "時間" + (v % 60) + "分" : v + "分"
+      });
+
+      renderCategoryPanel(root, "就寝場所", data, {
+        getKey: rec => rec.sleep_place,
+        colors: PLACE_CHART_COLORS,
+        labels: PLACE_LABELS
       });
     }
 
@@ -1637,7 +1712,9 @@
       container.appendChild(wrap);
     }
 
-    function renderAlcoholPanel(container, title, data) {
+    // 日ごとに1つのカテゴリ値(飲酒レベル・就寝場所など)を色分けした帯で示す汎用パネル。
+    // opts: { getKey: rec => キー or null, colors: {キー:色}, labels: {キー:表示名} }
+    function renderCategoryPanel(container, title, data, opts) {
       const wrap = document.createElement("div");
       wrap.className = "chart-panel";
       const titleEl = document.createElement("div");
@@ -1645,7 +1722,7 @@
       titleEl.textContent = title;
       wrap.appendChild(titleEl);
 
-      if (!data.some(d => d.rec && d.rec.alcohol_level)) {
+      if (!data.some(d => d.rec && opts.getKey(d.rec))) {
         const empty = document.createElement("div");
         empty.className = "chart-empty";
         empty.textContent = "まだ記録がありません";
@@ -1665,8 +1742,8 @@
       tooltip.className = "chart-tooltip";
 
       data.forEach((d, i) => {
-        const level = d.rec ? d.rec.alcohol_level : null;
-        if (!level) return;
+        const key = d.rec ? opts.getKey(d.rec) : null;
+        if (!key) return;
         const barW = unit * 0.7;
         const x = i * unit + (unit - barW) / 2;
         const rect = document.createElementNS(svgNS, "rect");
@@ -1675,9 +1752,9 @@
         rect.setAttribute("width", barW);
         rect.setAttribute("height", 14);
         rect.setAttribute("rx", 1.5);
-        rect.setAttribute("fill", ALCOHOL_CHART_COLORS[level]);
+        rect.setAttribute("fill", opts.colors[key]);
         rect.style.cursor = "pointer";
-        rect.addEventListener("click", e => showChartTooltip(e.target, tooltip, svgWrap, d.date, ALCOHOL_LABELS[level]));
+        rect.addEventListener("click", e => showChartTooltip(e.target, tooltip, svgWrap, d.date, opts.labels[key]));
         svg.appendChild(rect);
       });
 
@@ -1688,10 +1765,126 @@
 
       const legend = document.createElement("div");
       legend.className = "chart-legend";
-      Object.keys(ALCOHOL_LABELS).forEach(key => {
+      Object.keys(opts.labels).forEach(key => {
         const item = document.createElement("span");
         item.className = "chart-legend-item";
-        item.innerHTML = '<span class="chart-legend-dot" style="background:' + ALCOHOL_CHART_COLORS[key] + '"></span>' + ALCOHOL_LABELS[key];
+        item.innerHTML = '<span class="chart-legend-dot" style="background:' + opts.colors[key] + '"></span>' + opts.labels[key];
+        legend.appendChild(item);
+      });
+      wrap.appendChild(legend);
+
+      container.appendChild(wrap);
+    }
+
+    const PLACE_CHART_COLORS = { home: "#2a78d6", partner: "#e87ba4", other: "#c3c2b7" };
+
+    // 睡眠・外出・自由時間を1本の積み上げバーで示し、「稼働割合」(睡眠+外出が
+    // 1日に占める割合)を数値でも分かるようにする。24時間ちょうどで積み上がる
+    // ため、比率がそのまま面積として読み取れる。
+    function renderStackedDayPanel(container, title, data) {
+      const wrap = document.createElement("div");
+      wrap.className = "chart-panel";
+      const titleEl = document.createElement("div");
+      titleEl.className = "chart-panel-title";
+      titleEl.textContent = title;
+      wrap.appendChild(titleEl);
+
+      const rows = data.map(d => {
+        const sleep = sleepHoursOf(d.rec);
+        if (sleep == null) return null;
+        const away = awayHoursOf(d.rec);
+        const free = Math.max(0, 24 - sleep - away);
+        const workRatio = Math.round(((sleep + away) / 24) * 100);
+        return { sleep, away, free, workRatio };
+      });
+
+      if (!rows.some(r => r != null)) {
+        const empty = document.createElement("div");
+        empty.className = "chart-empty";
+        empty.textContent = "まだ記録がありません(就寝・起床の記録が必要です)";
+        wrap.appendChild(empty);
+        container.appendChild(wrap);
+        return;
+      }
+
+      // %表示はSVG内にtext要素で描くと、横幅だけ伸縮させる(preserveAspectRatio="none")
+      // 影響で文字が潰れてしまうため、SVGの外側にHTMLの行として重ねて表示する。
+      const showLabels = data.length <= 7;
+      if (showLabels) {
+        const labelRow = document.createElement("div");
+        labelRow.className = "chart-percent-labels";
+        rows.forEach(r => {
+          const span = document.createElement("span");
+          span.textContent = r ? r.workRatio + "%" : "";
+          labelRow.appendChild(span);
+        });
+        wrap.appendChild(labelRow);
+      }
+
+      const unit = 10, height = 90, bottom = height - 16, top = 10;
+      const plotH = bottom - top;
+      const gap = 1;
+      const svgWrap = document.createElement("div");
+      svgWrap.className = "chart-svg-wrap";
+      const svg = makeChartSvg(data.length, unit, height);
+      svg.style.height = height + "px";
+      const svgNS = "http://www.w3.org/2000/svg";
+
+      const baseline = document.createElementNS(svgNS, "line");
+      baseline.setAttribute("x1", 0);
+      baseline.setAttribute("x2", data.length * unit);
+      baseline.setAttribute("y1", bottom);
+      baseline.setAttribute("y2", bottom);
+      baseline.setAttribute("stroke", "#c3c2b7");
+      baseline.setAttribute("stroke-width", 0.6);
+      svg.appendChild(baseline);
+
+      const tooltip = document.createElement("div");
+      tooltip.className = "chart-tooltip";
+
+      const SEGMENTS = [
+        { key: "sleep", color: "#2a78d6", label: "睡眠" },
+        { key: "away", color: "#eb6834", label: "外出" },
+        { key: "free", color: "#1baf7a", label: "自由" },
+      ];
+
+      rows.forEach((r, i) => {
+        if (!r) return;
+        const barW = unit * 0.7;
+        const x = i * unit + (unit - barW) / 2;
+        let cursorY = bottom;
+
+        SEGMENTS.forEach(seg => {
+          const h = (r[seg.key] / 24) * plotH;
+          if (h <= 0) return;
+          const segH = Math.max(h - gap, 0.5);
+          const y = cursorY - h;
+          const rect = document.createElementNS(svgNS, "rect");
+          rect.setAttribute("x", x);
+          rect.setAttribute("y", y);
+          rect.setAttribute("width", barW);
+          rect.setAttribute("height", segH);
+          rect.setAttribute("rx", 1.2);
+          rect.setAttribute("fill", seg.color);
+          rect.style.cursor = "pointer";
+          const tipText = "睡眠" + r.sleep.toFixed(1) + "h / 外出" + r.away.toFixed(1) + "h / 自由" + r.free.toFixed(1) + "h (稼働" + r.workRatio + "%)";
+          rect.addEventListener("click", e => showChartTooltip(e.target, tooltip, svgWrap, data[i].date, tipText));
+          svg.appendChild(rect);
+          cursorY -= h;
+        });
+      });
+
+      svgWrap.appendChild(svg);
+      svgWrap.appendChild(tooltip);
+      wrap.appendChild(svgWrap);
+      wrap.appendChild(makeChartAxisLabels(data));
+
+      const legend = document.createElement("div");
+      legend.className = "chart-legend";
+      SEGMENTS.forEach(seg => {
+        const item = document.createElement("span");
+        item.className = "chart-legend-item";
+        item.innerHTML = '<span class="chart-legend-dot" style="background:' + seg.color + '"></span>' + seg.label;
         legend.appendChild(item);
       });
       wrap.appendChild(legend);
